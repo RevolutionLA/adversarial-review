@@ -1,0 +1,11 @@
+# 内部评审记录（默认不发布）
+# 如需把评审记录作为质量流程公开，请从本文件移除下面这行，并清理 README/CHANGELOG 中的引用。
+/docs/review/
+
+# 常见忽略项
+.DS_Store
+Thumbs.db
+*.log
+node_modules/
+.idea/
+.vscode/

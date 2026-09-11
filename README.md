@@ -117,9 +117,33 @@ bash skills/adversarial-review/scripts/verify-install.sh ~/.claude/skills/advers
 
 | 档位 | 配置 | 适用 |
 |---|---|---|
-| **轻档** | 1 个蓝军（聚焦正确性 / 兼容性 / 测试有效性）| 小改动、时间紧 |
+| **轻档** | 1 个蓝军（聚焦选定维度）| 小改动、时间紧 |
 | **标准档**（默认）| 蓝军 → 第三方 → 中立裁定，共 3 轮 | 一般功能版本 |
 | **重档** | 标准档 + 多路并行交叉验证 | 发布前、重大重构、涉及上游兼容 |
+
+---
+
+## 覆盖哪些质量维度
+
+三角色只解决"**怎么审**"，不解决"**审哪里**"。所以 v2.0 附带一张 **19 维度清单**（[`review-dimensions.md`](skills/adversarial-review/references/review-dimensions.md)），按改动类型选取本次必审范围：
+
+| 类别 | 维度 |
+|---|---|
+| **需求与设计** | 需求一致性 · 架构与设计 |
+| **代码正确性** | 正确性 · 错误处理 · 并发与竞态 |
+| **质量属性** | 性能 · 安全 · 隐私与数据 · 可观测性 |
+| **验证** | 测试有效性 |
+| **演进与共存** | 兼容性 · 依赖与供应链 · 资源与生命周期 · 数据迁移与状态演进 |
+| **工程与交付** | 配置与密钥 · 发布工程 · 文档一致性 · 可访问性与国际化 · 许可证合规 |
+
+**按改动类型选，不要全审**——修 bug 就重点审「正确性 / 错误处理 / 测试（必须有回归用例）/ 兼容性」；19 项全塞进一次审查只会让报告又长又浅。
+
+v2.0 把这张表接进了流程，而不只是写在文档里：
+
+- 第 0 步要求**选定维度**
+- 第 1 步要求蓝军**逐维度表态**（哪怕"未发现问题"，禁止整项跳过）
+- 第 2 步要求第三方**稽核蓝军的覆盖度**——否则蓝军的盲区会变成整个流程的盲区
+- 第 3 步要求裁定方**审查两方共有的前提**——这是同模型互搏最大的盲区
 
 ---
 
@@ -129,13 +153,14 @@ bash skills/adversarial-review/scripts/verify-install.sh ~/.claude/skills/advers
 
 ```
 docs/review/
-├─ BLUE-TEAM-REVIEW-1.2.0.md       # 蓝军：缺陷总表 + 逐条证据链 + 未验证项
-├─ RESPONSE-1.2.0.md               # 开发团队：逐条采纳/部分/推迟/驳回
-├─ THIRD-PARTY-REVIEW-1.2.0.md     # 第三方：整改验证表 + 新发现缺陷(T项)
-└─ ADJUDICATION-1.2.0.md           # 中立裁定：对双方结论的最终裁定 + 合并执行清单
+├─ BLUE-TEAM-REVIEW-<version>.md    # 蓝军：缺陷总表 + 逐条证据链 + 维度覆盖声明 + 未验证项
+├─ RESPONSE-<version>.md            # 开发团队：逐条采纳/部分/推迟/驳回
+├─ THIRD-PARTY-REVIEW-<version>.md  # 第三方：整改验证表 + 新缺陷(T项) + 覆盖度稽核
+└─ ADJUDICATION-<version>.md        # 中立裁定：最终裁定 + 共同前提审查 + 合并执行清单
 ```
 
-完整示例见 [`examples/sample-review.md`](skills/adversarial-review/examples/sample-review.md) —— 包含一份**真实的蓝军报告片段**，可以看到证据链长什么样。
+真实产出见本仓库的 [`docs/review/`](docs/review/) —— v2.0 就是对 v1.1 跑了一轮重档评审后的整改结果。
+教学样例见 [`examples/sample-review.md`](skills/adversarial-review/examples/sample-review.md)。
 
 ---
 

@@ -68,11 +68,31 @@ else
   echo "✗ description 缺失"; fail=1
 fi
 
-# 4. 规范校验（若 node 可用）
-if command -v node >/dev/null 2>&1 && [ -f "${FOUND}/scripts/validate-skill.mjs" ]; then
+# 4. 规范校验（若本机有校验器）
+# 注意：v2.0 起校验器位于仓库级 scripts/，不随 skill 安装。
+# 依次尝试：同目录安装副本 -> 环境变量 -> 仓库布局，都找不到就明确说明，不要静默跳过。
+VALIDATOR=""
+for cand in \
+  "${FOUND}/scripts/validate-skill.mjs" \
+  "${ADVERSARIAL_REVIEW_VALIDATOR:-}" \
+  "$(dirname "$0")/../../../scripts/validate-skill.mjs"
+do
+  if [ -n "$cand" ] && [ -f "$cand" ]; then VALIDATOR="$cand"; break; fi
+done
+
+if command -v node >/dev/null 2>&1; then
+  if [ -n "$VALIDATOR" ]; then
+    echo ""
+    echo "--- 规范校验 ($VALIDATOR) ---"
+    node "$VALIDATOR" "$FOUND" || fail=1
+  else
+    echo ""
+    echo "·  未找到 validate-skill.mjs（它位于仓库 scripts/，不随 skill 安装），跳过规范校验"
+    echo "   如需完整校验，请从仓库运行： node scripts/validate-skill.mjs <skill目录>"
+  fi
+else
   echo ""
-  echo "--- 规范校验 ---"
-  node "${FOUND}/scripts/validate-skill.mjs" "$FOUND" || fail=1
+  echo "·  未检测到 node，跳过规范校验"
 fi
 
 echo ""

@@ -65,12 +65,20 @@ cat docs/review/ADJUDICATION-*.md           # 中立裁定：最终该修什么
 
 ## 想自己改模板？
 
-`SKILL.md` 末尾有「提示词设计要点」表，列出了改模板时**不能丢**的 8 条。动之前先读那张表。
+**改之前先读两个地方**：
 
-改完用自带校验器过一遍：
+1. **[`prompt-templates.md`](prompt-templates.md)** —— 三个角色的完整提示词模板都在这里。
+2. **`SKILL.md` 的「提示词设计要点」表** —— 列出改模板时**不能丢**的 11 条约束（尤其是"逐维度表态""第三方稽核蓝军覆盖度""裁定方审查共同前提"这三条 v2.0 新增的）。
+
+**要扩展审查范围**（比如想加上"性能"之外的质量属性），改 [`review-dimensions.md`](review-dimensions.md)，不要去改模板——**维度是数据，模板是机制**。
+
+改完用校验器过一遍（校验器在**仓库**的 `scripts/` 下，不随 skill 安装）：
 
 ```bash
-node scripts/validate-skill.mjs .
+# 从仓库根目录运行
+node scripts/validate-skill.mjs skills/adversarial-review
+node scripts/test-validate-skill.mjs    # 校验器自身的回归测试
+node scripts/check-links.mjs            # 检查文档里的本地链接
 ```
 
-完整产出样例见 [`examples/sample-review.md`](../examples/sample-review.md)。
+完整产出样例见 [`../examples/sample-review.md`](../examples/sample-review.md)。

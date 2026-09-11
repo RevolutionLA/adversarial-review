@@ -4,7 +4,7 @@
 
 ## [2.0.2] - 2026-09-10
 
-**第三轮：中立裁定触发的 P0 修复。** 本轮由**全新第三方 agent** 独立裁定蓝军与第三方双方的结论，它抓到了开发团队（我）在 v2.0.1 中犯下的最严重错误。完整记录见 [`docs/review/`](docs/review/)。
+**第三轮：中立裁定触发的 P0 修复。** 本轮由**全新第三方 agent** 独立裁定蓝军与第三方双方的结论，它抓到了开发团队（我）在 v2.0.1 中犯下的最严重错误。评审记录按项目策略保留在本地 `docs/review/`（不入库）。
 
 ### 这轮评审最有价值的一条：我的修复引入了 B1 的镜像复发
 
@@ -32,7 +32,7 @@ v2.0.1 提交（`09a2135`）中，`validate-skill.mjs` 的 folded/literal 分支
   - **若当初有此门禁，`09a2135` 不可能被提交。**
   - 启用：`git config core.hooksPath .githooks`
 - `scripts/test-mutations.mjs` —— 突变测试框架，自动注入 11 个缺陷验证回归测试能否抓住（当前 10 抓住 / 0 逃逸 / 1 等价突变）。
-- `docs/review/ADJUDICATION-2.0.0.md` —— 中立裁定报告（23KB）。
+- 中立裁定报告（`docs/review/ADJUDICATION-2.0.0.md`，保留在本地不入库）。
 
 ### Changed
 
@@ -55,7 +55,7 @@ v2.0.1 提交（`09a2135`）中，`validate-skill.mjs` 的 folded/literal 分支
 - **`references/prompt-templates.md`** —— 三个角色的完整提示词模板 + 「占位符约定」表（明确定义 `<仓库绝对路径>` 指 git 仓库根，而非工作目录）。
 - **`scripts/test-validate-skill.mjs`** —— 校验器的 9 个回归用例，锁住块标量解析行为。
 - **`scripts/check-links.mjs`** —— markdown 本地链接检查器（替代原先永远不可能失败的 shell 版）。
-- **`docs/review/`** —— 本项目的三方评审记录（README、蓝军、第三方、裁定），作为可追溯的攻防档案。
+- 三方评审记录（蓝军、第三方、中立裁定、开发团队回应）—— 保留在本地 `docs/review/`，按项目策略不入库。
 
 ### Changed
 

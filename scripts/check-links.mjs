@@ -42,14 +42,24 @@ function isLocalLink(href) {
   return true;
 }
 
+/** 剔除围栏代码块与行内代码，避免把文档里的"反例文本"当成真链接 */
+function stripCode(text) {
+  return text
+    .replace(/^```[\s\S]*?^```/gm, "")      // ``` 围栏块
+    .replace(/^~~~[\s\S]*?^~~~/gm, "")      // ~~~ 围栏块
+    .replace(/`[^`\n]*`/g, "");             // 行内代码
+}
+
 /**
  * 从 markdown 文本中提取所有链接目标。
- * 覆盖：
- *   1. 行内链接 [text](url) / 图片 ![alt](url)  —— url 可含空格（用 <...> 或裸空格）
- *   2. 引用式链接 [text][ref] / [text][] / [ref]  + 定义行 [ref]: url
- *   3. HTML 属性 href="..." / src="..."
+ *
+ * ⚠️ 必须先剔除代码块与行内代码：文档里经常用反例讲缺陷
+ * （例如本项目 CHANGELOG 写「引用式链接 [text][ref] 完全不可见」），
+ * 那些"链接"是说明性文本，不是真链接。不剔除会产生误报——
+ * 而误报会让人关掉检查，比漏报更糟。
  */
-function extractLinks(text) {
+function extractLinks(rawText) {
+  const text = stripCode(rawText);
   const found = [];
 
   // 1. 行内：[text](url "title")，url 允许含空格

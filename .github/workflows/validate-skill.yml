@@ -39,10 +39,14 @@ jobs:
         run: |
           set -euo pipefail
           f="skills/adversarial-review/SKILL.md"
-          lines=$(wc -l < "$f")
-          echo "SKILL.md 正文行数: $lines"
-          if [ "$lines" -ge 500 ]; then
-            echo "::error::$f 有 $lines 行，超过 500 行上限，请用渐进式披露拆分到 references/"
+          # 规范原文：Keep your main SKILL.md under 500 lines
+          # 只统计**正文**（frontmatter 之后），因为规范约束的是载入上下文的部分，
+          # frontmatter 走的是 metadata 通道（~100 tokens），不应计入正文行数。
+          body=$(awk 'BEGIN{n=0;fm=0} /^---[[:space:]]*$/{fm++; next} fm>=2{n++} END{print n}' "$f")
+          total=$(wc -l < "$f")
+          echo "SKILL.md 总行数: $total，正文行数: $body"
+          if [ "$body" -ge 500 ]; then
+            echo "::error::$f 正文有 $body 行，超过 500 行建议上限，请用渐进式披露拆分到 references/"
             exit 1
           fi
 

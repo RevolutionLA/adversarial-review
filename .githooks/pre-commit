@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# .githooks/pre-commit — 提交前门禁
+#
+# 为什么需要这个：本项目发生过两次同类事故——
+#   1. v1.1.0 的校验器块标量缺陷在"自查已通过"的错觉下发布
+#   2. v2.0.1 提交时自带回归测试是红的（17/3），却照常提交
+# 根因不是能力问题，是**流程问题**：没有"测试必须全绿才能提交"的机械约束。
+# 靠自觉检查会漏，靠钩子不会。
+#
+# 启用：git config core.hooksPath .githooks
+
+set -euo pipefail
+
+fail() {
+  printf '\033[31m[pre-commit] ✗ %s\033[0m\n' "$1" >&2
+  exit 1
+}
+
+echo "[pre-commit] 运行门禁检查..."
+
+command -v node >/dev/null 2>&1 || fail "未找到 node，无法运行检查"
+
+# 1. 回归测试必须全绿
+if ! node scripts/test-validate-skill.mjs >/tmp/precommit-test.log 2>&1; then
+  cat /tmp/precommit-test.log >&2
+  fail "回归测试未通过 —— 禁止提交（这正是本项目两次事故的根因）"
+fi
+echo "[pre-commit] ✅ 回归测试通过"
+
+# 2. 突变测试必须无逃逸（验证测试真的有效，而非装饰）
+if ! node scripts/test-mutations.mjs >/tmp/precommit-mut.log 2>&1; then
+  cat /tmp/precommit-mut.log >&2
+  fail "突变测试存在逃逸 —— 说明回归测试无法抓住缺陷，禁止提交"
+fi
+echo "[pre-commit] ✅ 突变测试无逃逸"
+
+# 3. 规范校验
+if ! node scripts/validate-skill.mjs skills/adversarial-review >/tmp/precommit-spec.log 2>&1; then
+  cat /tmp/precommit-spec.log >&2
+  fail "SKILL.md 不符合 Agent Skills 规范"
+fi
+echo "[pre-commit] ✅ 规范校验通过"
+
+# 4. 本地链接可达
+if ! node scripts/check-links.mjs >/tmp/precommit-links.log 2>&1; then
+  cat /tmp/precommit-links.log >&2
+  fail "存在断链"
+fi
+echo "[pre-commit] ✅ 链接检查通过"
+
+# 5. shell 语法
+for f in skills/adversarial-review/scripts/*.sh; do
+  bash -n "$f" || fail "shell 语法错误: $f"
+done
+echo "[pre-commit] ✅ shell 语法通过"
+
+echo "[pre-commit] 全部门禁通过，允许提交。"

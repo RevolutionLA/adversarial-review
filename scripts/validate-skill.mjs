@@ -71,13 +71,13 @@ function parseFrontmatter(text) {
       }
       if (currentBlock && blockStyle !== "plain") {
         const content = line.replace(/^\s+/, "");
-        if (blockStyle === "literal") {
-          // 折叠块：非空行之间用空格连接，空行保留为换行
+        if (blockStyle === "folded") {
+          // 折叠块（>）：非空行之间用空格连接
           fields[currentBlock] = fields[currentBlock]
             ? `${fields[currentBlock]} ${content}`
             : content;
         } else {
-          // 字面块：保留换行
+          // 字面块（|）：保留换行
           fields[currentBlock] = fields[currentBlock]
             ? `${fields[currentBlock]}\n${content}`
             : content;

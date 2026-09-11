@@ -14,6 +14,24 @@ for c in "${CANDIDATES[@]}"; do
   if [ -f "${c}/SKILL.md" ]; then FOUND="$c"; break; fi
 done
 
+FOUND=""
+
+# 显式指定的路径优先，且要在"自动查找失败"之前生效
+if [ -n "${1:-}" ]; then
+  if [ -f "${1}/SKILL.md" ]; then
+    FOUND="$1"
+  else
+    echo "✗ 指定路径下没有 SKILL.md: $1"
+    exit 1
+  fi
+fi
+
+if [ -z "$FOUND" ]; then
+  for c in "${CANDIDATES[@]}"; do
+    if [ -f "${c}/SKILL.md" ]; then FOUND="$c"; break; fi
+  done
+fi
+
 if [ -z "$FOUND" ]; then
   echo "✗ 未找到 ${SKILL_NAME}，已检查以下位置："
   for c in "${CANDIDATES[@]}"; do echo "    - $c"; done
@@ -21,8 +39,6 @@ if [ -z "$FOUND" ]; then
   echo "请先安装，或手动指定路径: bash scripts/verify-install.sh /your/skills/dir"
   exit 1
 fi
-
-if [ -n "${1:-}" ]; then FOUND="$1"; fi
 
 echo "发现安装位置: $FOUND"
 echo ""

@@ -31,19 +31,34 @@ const KNOWN_FIELDS = new Set([
   "allowed-tools",
 ]);
 
-/** 极简 YAML frontmatter 解析器：只处理本规范所需的一层键值 + metadata 缩进块。 */
+/**
+ * 极简 YAML frontmatter 解析器：只处理本规范所需的键值 + 块标量 + metadata 缩进块。
+ *
+ * 支持的块标量写法（Anthropic 官方文档示例中均在使用）：
+ *   key: >        折叠块（多行折叠为一行，空行变 \n）
+ *   key: |-       字面块（保留换行；- 表示去掉结尾换行）
+ *   key: |        字面块
+ *   key: >-       折叠块，去尾换行
+ * 也兼容 key: 后直接跟空值、再跟缩进内容块（本仓库 metadata 即此写法）。
+ */
 function parseFrontmatter(text) {
   const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(text);
   if (!m) return { ok: false, reason: "文件未以 YAML frontmatter (---) 开头" };
 
   const raw = m[1];
   const fields = {};
-  let currentBlock = null;
+  let currentBlock = null; // 当前正在收集缩进内容的键
+  let blockStyle = "plain"; // plain | folded | literal
 
-  for (const line of raw.split(/\r?\n/)) {
+  const lines = raw.split(/\r?\n/);
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     if (!line.trim() || line.trimStart().startsWith("#")) continue;
 
     const indented = /^\s+\S/.test(line);
+
+    // 缩进行：归属于当前块
     if (indented) {
       if (currentBlock === "metadata") {
         const mm = /^\s+([^:]+):\s*(.*)$/.exec(line);
@@ -51,22 +66,52 @@ function parseFrontmatter(text) {
           fields.metadata ??= {};
           fields.metadata[mm[1].trim()] = stripQuotes(mm[2].trim());
         }
+        continue;
       }
-      continue;
+      if (currentBlock && blockStyle !== "plain") {
+        const content = line.replace(/^\s+/, "");
+        if (blockStyle === "folded") {
+          // 折叠块：非空行之间用空格连接，空行保留为换行
+          fields[currentBlock] = fields[currentBlock]
+            ? `${fields[currentBlock]} ${content}`
+            : content;
+        } else {
+          // 字面块：保留换行
+          fields[currentBlock] = fields[currentBlock]
+            ? `${fields[currentBlock]}\n${content}`
+            : content;
+        }
+        continue;
+      }
+      continue; // plain 模式下忽略游离缩进行
     }
 
+    // 非缩进行：新的键
     const kv = /^([A-Za-z0-9_-]+):\s*(.*)$/.exec(line);
     if (!kv) continue;
     const key = kv[1];
-    let value = kv[2].trim();
+    const value = kv[2].trim();
+
+    // 块标量指示符：> |> >- | ||- 等
+    const blockMatch = /^([|>])([+-]?\d*|[0-9]*[+-]?)$/.exec(value);
+    if (blockMatch) {
+      currentBlock = key;
+      blockStyle = blockMatch[1] === ">" ? "folded" : "literal";
+      fields[key] = "";
+      continue;
+    }
 
     if (value === "") {
+      // 空值：可能是 metadata 映射块，或后跟缩进内容的普通块
       currentBlock = key;
+      blockStyle = key === "metadata" ? "plain" : "literal";
       if (key === "metadata") fields.metadata = {};
       else fields[key] = "";
       continue;
     }
+
     currentBlock = null;
+    blockStyle = "plain";
     fields[key] = stripQuotes(value);
   }
 

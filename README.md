@@ -54,9 +54,9 @@
 # 克隆到任意位置
 git clone https://github.com/RevolutionLA/adversarial-review.git
 
-# 复制到你的 agent 的 skills 目录
+# 复制到你的 agent 的 skills 目录（注意 skill 在 skills/<name>/ 子目录下）
 mkdir -p ~/.claude/skills
-cp -r adversarial-review ~/.claude/skills/
+cp -r adversarial-review/skills/adversarial-review ~/.claude/skills/
 ```
 
 Windows (PowerShell)：
@@ -64,23 +64,39 @@ Windows (PowerShell)：
 ```powershell
 git clone https://github.com/RevolutionLA/adversarial-review.git
 New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.claude\skills" | Out-Null
-Copy-Item -Recurse -Force ".\adversarial-review" "$env:USERPROFILE\.claude\skills\"
+Copy-Item -Recurse -Force ".\adversarial-review\skills\adversarial-review" "$env:USERPROFILE\.claude\skills\"
 ```
 
-### 方式二：一行安装脚本
+### 方式二：skills.sh / npx（推荐）
+
+本仓库遵循 [skills.sh](https://skills.sh) 目录结构（`skills/<name>/SKILL.md`），可直接一键安装到多个 agent：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/RevolutionLA/adversarial-review/main/scripts/install.sh | bash
+# 装到 Claude Code
+npx skills add RevolutionLA/adversarial-review -a claude-code
+
+# 一次装到多个 agent
+npx skills add RevolutionLA/adversarial-review -a claude-code -a cursor -a opencode
+```
+
+### 方式三：一行安装脚本
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/RevolutionLA/adversarial-review/main/skills/adversarial-review/scripts/install.sh | bash
 ```
 
 ```powershell
-irm https://raw.githubusercontent.com/RevolutionLA/adversarial-review/main/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/RevolutionLA/adversarial-review/main/skills/adversarial-review/scripts/install.ps1 | iex
 ```
+
+> 已有安装时，脚本会**备份到 `.bak.<时间戳>` 而不是直接删除**，你本地的自定义修改不会丢。
 
 ### 验证安装
 
 ```bash
-bash scripts/verify-install.sh
+bash skills/adversarial-review/scripts/verify-install.sh
+# 或指定路径
+bash skills/adversarial-review/scripts/verify-install.sh ~/.claude/skills/adversarial-review
 ```
 
 ---
@@ -119,7 +135,7 @@ docs/review/
 └─ ADJUDICATION-1.2.0.md           # 中立裁定：对双方结论的最终裁定 + 合并执行清单
 ```
 
-完整示例见 [`examples/`](examples/) —— 包含一份**真实的蓝军报告片段**，可以看到证据链长什么样。
+完整示例见 [`examples/sample-review.md`](skills/adversarial-review/examples/sample-review.md) —— 包含一份**真实的蓝军报告片段**，可以看到证据链长什么样。
 
 ---
 

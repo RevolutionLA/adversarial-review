@@ -17,25 +17,37 @@ jobs:
         with:
           node-version: "20"
 
+      - name: 校验器自身的回归测试
+        run: node scripts/test-validate-skill.mjs
+
       - name: 校验 SKILL.md 符合 Agent Skills 规范
-        run: node scripts/validate-skill.mjs .
+        run: node scripts/validate-skill.mjs skills/adversarial-review
 
-      - name: 校验 frontmatter name 与仓库/目录名一致
+      - name: 校验 frontmatter name 与目录名一致
         run: |
-          name=$(sed -n 's/^name:[[:space:]]*//p' SKILL.md | head -n 1 | tr -d '\r')
+          set -euo pipefail
+          dir="skills/adversarial-review"
+          name=$(sed -n 's/^name:[[:space:]]*//p' "$dir/SKILL.md" | head -n 1 | tr -d '\r')
           echo "frontmatter name = $name"
-          test "$name" = "adversarial-review" || { echo "::error::name 必须为 adversarial-review"; exit 1; }
+          test "$name" = "$(basename "$dir")" \
+            || { echo "::error::frontmatter name ($name) 必须与目录名一致"; exit 1; }
 
-      - name: 校验 install.sh 语法
-        run: bash -n scripts/install.sh
-
-      - name: 校验 README 中的本地链接可达
+      - name: 校验 SKILL.md 正文行数（规范建议 < 500 行）
         run: |
-          fail=0
-          for f in $(grep -oE '\]\(\.?/?[A-Za-z0-9_./-]+\.(md|sh|ps1|mjs)\)' README.md references/*.md 2>/dev/null \
-                     | sed -E 's/.*\]\(//; s/\)$//' | sed 's|^\./||' | sort -u); do
-            if [ ! -e "$f" ] && [ ! -e "$(dirname references)/$f" ]; then
-              echo "::warning::README 引用了不存在的文件: $f"
-            fi
-          done
-          exit $fail
+          set -euo pipefail
+          f="skills/adversarial-review/SKILL.md"
+          lines=$(wc -l < "$f")
+          echo "SKILL.md 正文行数: $lines"
+          if [ "$lines" -ge 500 ]; then
+            echo "::error::$f 有 $lines 行，超过 500 行上限，请用渐进式披露拆分到 references/"
+            exit 1
+          fi
+
+      - name: 校验 shell / PowerShell 脚本语法
+        run: |
+          set -euo pipefail
+          bash -n skills/adversarial-review/scripts/install.sh
+          bash -n skills/adversarial-review/scripts/verify-install.sh
+
+      - name: 校验 markdown 中的本地链接可达
+        run: node scripts/check-links.mjs

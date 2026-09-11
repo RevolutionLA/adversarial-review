@@ -16,6 +16,32 @@ skill-name/
 
 ---
 
+## 渐进式披露（Progressive Disclosure）—— 最容易被忽略的规范
+
+这是官方规范里**最容易漏掉、后果最直接**的一组约束。它们不在 frontmatter 校验范围内，所以**自动化工具查不出来，只能靠人遵守**。
+
+| 约束 | 要求 | 违反后果 |
+|---|---|---|
+| **正文行数** | `SKILL.md` 正文应 **< 500 行** | 超长正文挤占上下文，agent 处理真实任务的能力下降 |
+| **引用深度** | 文件引用只能 **一层深**（从 SKILL.md 直接指向 `references/xxx.md`） | 深层嵌套会导致 agent **只读取到部分内容** |
+| **内容分层** | 核心指令放 SKILL.md，详细资料放 `references/` | 把参考手册塞进正文，等于每次激活都强制加载它 |
+
+**为什么这三条重要**：frontmatter 有校验器能查，正文没有。**规范在这里靠自觉**——所以它最容易在"赶时间"时被牺牲。
+
+**做法**：正文只保留"做什么、按什么顺序做、什么情况例外"；把模板、长表格、规范速查、示例等"按需才看"的内容外置。本仓库自己的 `SKILL.md` 就是按此组织（正文 181 行，三个提示词模板外置到 `references/prompt-templates.md`）。
+
+**自检**：
+
+```bash
+# 正文是否超 500 行
+wc -l skills/*/SKILL.md
+
+# 是否存在深层引用（形如 references/a/b.md 的引用通常意味着嵌套）
+grep -rn "references/.*/" skills/*/SKILL.md
+```
+
+---
+
 ## frontmatter 字段
 
 | 字段 | 必需 | 约束 |
@@ -26,6 +52,8 @@ skill-name/
 | `compatibility` | ❌ | 1-500 字符；仅在有特定环境要求时使用 |
 | `metadata` | ❌ | 字符串键值映射（如 author / version） |
 | `allowed-tools` | ❌ | 空格分隔的预授权工具列表（实验性，宿主支持度不一） |
+
+> **依据说明**：「`name` 必须与父目录名一致」以及上表各字段的长度上限，均来自 **Agent Skills 官方规范**（`agentskills` 规范文档的 frontmatter 表格），不是本仓库的约定。本仓库的 `scripts/validate-skill.mjs` 按此实现校验。
 
 ### 合法 / 非法 name 对照
 

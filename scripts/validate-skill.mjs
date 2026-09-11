@@ -20,6 +20,7 @@
 
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { basename, dirname, resolve, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const KNOWN_FIELDS = new Set([
@@ -70,7 +71,7 @@ function parseFrontmatter(text) {
       }
       if (currentBlock && blockStyle !== "plain") {
         const content = line.replace(/^\s+/, "");
-        if (blockStyle === "folded") {
+        if (blockStyle === "literal") {
           // 折叠块：非空行之间用空格连接，空行保留为换行
           fields[currentBlock] = fields[currentBlock]
             ? `${fields[currentBlock]} ${content}`
@@ -229,26 +230,35 @@ function validateOne(inputPath) {
   return { skillFile, dirName, errors, warnings, notes };
 }
 
-const targets = process.argv.slice(2);
-if (targets.length === 0) {
-  console.error("用法: node scripts/validate-skill.mjs <skill目录|SKILL.md> [...]");
-  process.exit(2);
-}
+// 供测试直接调用做语义断言（字符数无法区分折叠块与字面块，必须比对内容）
+export { parseFrontmatter, validateOne };
 
-let failed = 0;
-for (const t of targets) {
-  const r = validateOne(t);
-  console.log(`\n=== ${r.skillFile} ===`);
-  for (const n of r.notes) console.log(`  · ${n}`);
-  for (const w of r.warnings) console.log(`  ⚠ ${w}`);
-  for (const e of r.errors) console.log(`  ✗ ${e}`);
-  if (r.errors.length === 0) console.log("  ✅ 通过 Agent Skills 规范校验");
-  else failed++;
-}
+// 仅在作为 CLI 直接运行时才解析参数、输出、设置退出码
+const isDirectRun =
+  process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
 
-console.log("");
-if (failed > 0) {
-  console.log(`结果: ${failed} 个未通过`);
-  process.exit(1);
+if (isDirectRun) {
+  const targets = process.argv.slice(2);
+  if (targets.length === 0) {
+    console.error("用法: node scripts/validate-skill.mjs <skill目录|SKILL.md> [...]");
+    process.exit(2);
+  }
+
+  let failed = 0;
+  for (const t of targets) {
+    const r = validateOne(t);
+    console.log(`\n=== ${r.skillFile} ===`);
+    for (const n of r.notes) console.log(`  · ${n}`);
+    for (const w of r.warnings) console.log(`  ⚠ ${w}`);
+    for (const e of r.errors) console.log(`  ✗ ${e}`);
+    if (r.errors.length === 0) console.log("  ✅ 通过 Agent Skills 规范校验");
+    else failed++;
+  }
+
+  console.log("");
+  if (failed > 0) {
+    console.log(`结果: ${failed} 个未通过`);
+    process.exit(1);
+  }
+  console.log("结果: 全部通过");
 }
-console.log("结果: 全部通过");

@@ -20,6 +20,9 @@ jobs:
       - name: 校验器自身的回归测试
         run: node scripts/test-validate-skill.mjs
 
+      - name: 突变测试（验证回归测试真的能抓住缺陷）
+        run: node scripts/test-mutations.mjs
+
       - name: 校验 SKILL.md 符合 Agent Skills 规范
         run: node scripts/validate-skill.mjs skills/adversarial-review
 
@@ -43,11 +46,28 @@ jobs:
             exit 1
           fi
 
-      - name: 校验 shell / PowerShell 脚本语法
+      - name: 校验 shell 脚本语法
         run: |
           set -euo pipefail
           bash -n skills/adversarial-review/scripts/install.sh
           bash -n skills/adversarial-review/scripts/verify-install.sh
+
+      - name: 校验 PowerShell 脚本语法
+        shell: pwsh
+        run: |
+          $failed = $false
+          Get-ChildItem -Recurse -Filter *.ps1 | ForEach-Object {
+            $errs = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$errs) | Out-Null
+            if ($errs.Count -gt 0) {
+              Write-Host "::error file=$($_.FullName)::$($errs.Count) 个语法错误"
+              $errs | ForEach-Object { Write-Host "  $($_.Message)" }
+              $failed = $true
+            } else {
+              Write-Host "OK: $($_.Name)"
+            }
+          }
+          if ($failed) { exit 1 }
 
       - name: 校验 markdown 中的本地链接可达
         run: node scripts/check-links.mjs

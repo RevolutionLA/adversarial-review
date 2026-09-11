@@ -10,11 +10,6 @@ CANDIDATES=(
 )
 
 FOUND=""
-for c in "${CANDIDATES[@]}"; do
-  if [ -f "${c}/SKILL.md" ]; then FOUND="$c"; break; fi
-done
-
-FOUND=""
 
 # 显式指定的路径优先，且要在"自动查找失败"之前生效
 if [ -n "${1:-}" ]; then

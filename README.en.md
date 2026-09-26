@@ -12,20 +12,21 @@
 
 ## The most convincing thing about this skill
 
-**It caught its own author's mistakes — twice. The second time, the workflow itself caught it.**
+**It caught its own author's mistakes — not once, but before every release. The harshest round also proved that the author's prided self-check gates had blind spots.**
 
 | Mistake I made | Who caught it |
 |---|---|
 | Claimed "fixed" in a remediation doc — but **the file was never touched** | Third-party review (disproved it with a git blob hash) |
 | Fixed one bug and **introduced another**, then **committed while my own tests were failing** | Neutral adjudicator (ran the tests in an isolated checkout) |
+| Claimed "the new rules landed in all three prompt templates" — **only one actually had them**; the verify script printed "🎉 passed" against a stale install | Pre-release self-review of v2.1.0: third party + adjudicator (**25 findings, two full rounds**) |
 
-The second one is exactly the failure mode this skill's own first paragraph targets — **fixing A introduces B**. And it happened *inside a tool built specifically to catch that class of defect*.
-
-Afterwards I added a `.githooks/pre-commit` gate (regression tests + mutation tests + spec validation + link check; any failure blocks the commit) and **verified it actually blocks** by re-injecting the bug — the gate correctly refused the commit.
+The second one is exactly the failure mode this skill's own first paragraph targets — **fixing A introduces B** — inside a tool built to catch that class of defect. The third went deeper: during the v2.1.0 self-review the third party **ran the verify script and got an exit-0 "passed" on outdated state**, proving the very anti-pattern the docs warn about ("a check that can never fail is not a check") was alive in my own tooling. The response wasn't an apology — it was a new **gate that can go red** (`check-docs.mjs`), which in its first night on the job caught the author's own stale line-count claims.
 
 > **This skill doesn't prevent you from making mistakes. It prevents mistakes from being hidden.**
 >
-> Both of the above were mine, and both were caught by this workflow.
+> All three mistakes above were mine, all caught by this workflow, each with a re-checkable evidence trail (four reports under `docs/review/`, kept local).
+>
+> **30-second gut feel**: read a [real review sample](skills/adversarial-review/examples/sample-review.md) with full evidence chains.
 
 ---
 
@@ -118,7 +119,7 @@ irm https://raw.githubusercontent.com/RevolutionLA/adversarial-review/main/skill
 ```
 </details>
 
-> If a previous install exists, the script **backs it up to `.bak.<timestamp>` instead of deleting it** — your local edits are preserved.
+> If a previous install exists, the script **moves it into a `skill-backups/` directory outside the skills dir** before overwriting — your local edits are preserved, and the backup can never linger as a ghost skill hijacking triggers.
 
 ### Verify the install
 
@@ -206,10 +207,12 @@ Three rounds of self-review during development. What they actually caught:
 | **v2.0 Blue Team** | The validator read `description: >` as **1 character yet still reported "passed"**; SKILL.md contained **zero references** to its companion files; the repo layout meant **skills.sh would never index it**; the CI link check **could never fail** |
 | **v2.0 Third Party** | A "fixed" claim in the remediation doc was **false** (disproved by blob hash); a CI step **didn't do what its name said**; 5 mutations escaped the new tests |
 | **v2.0.2 Adjudicator** | **The fix introduced a new bug** — `>` and `|` parsing semantics were swapped, and that commit **shipped with its own tests red**; the install-verify script **reported a fake "passed" to users** |
+| **v2.1.0, two full rounds** | Blue Team: 11 findings (false "landed in all templates" claim, stale installed copy, backups hijacking trigger routing…) → Third Party: 14 findings proving **round-1 remediation only partially landed**, `verify-install` printing "🎉 passed" against a stale copy, and **all four gates blind to this entire defect class** → Adjudicator: re-graded 2, rejected 1 suggestion, and implemented the fifth gate on the spot |
 
 ### Quality infrastructure that came out of it
 
-- **`.githooks/pre-commit` gate** — regression tests + mutation tests + spec validation + link check; any failure blocks the commit. Verified to actually block by re-injecting the bug. (Enable: `git config core.hooksPath .githooks`)
+- **`.githooks/pre-commit` gate (five checks)** — regression tests + mutation tests + spec validation + link check + doc-claim guard; any failure blocks the commit. Verified to actually block by re-injecting the bug. (Enable: `git config core.hooksPath .githooks`)
+- **Doc-claim guard** (`scripts/check-docs.mjs`, new in v2.1) — extracts numeric claims ("SKILL.md has N lines", "the design-points table has M rows") from CHANGELOG/README and diffs them against reality. **Its first run caught the author's own stale line counts** (175→177 unsynced).
 - **Mutation testing** (`scripts/test-mutations.mjs`) — injects 11 defects into the code and checks whether the regression tests **can catch them**. Currently **10 caught / 0 escaped / 1 equivalent mutant**.
   - **Why it's needed**: green tests ≠ effective tests. This project's regression suite once let 5 mutations escape — including one where deleting the length-limit check caused a **1235-character illegal description to be reported as passing**.
 - **Agent Skills spec validator** (`scripts/validate-skill.mjs`) — zero-dependency, usable as a general-purpose tool for your own skills.
@@ -276,6 +279,7 @@ adversarial-review/
 │   ├── validate-skill.mjs           ← Agent Skills spec validator
 │   ├── test-validate-skill.mjs      ← validator regression tests (20 cases)
 │   ├── test-mutations.mjs           ← mutation testing
+│   ├── check-docs.mjs               ← doc numeric-claim guard
 │   └── check-links.mjs              ← markdown link checker
 └── .githooks/pre-commit             ← commit gate
 ```

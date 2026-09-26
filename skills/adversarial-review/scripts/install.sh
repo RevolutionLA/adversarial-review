@@ -54,6 +54,18 @@ if [ -d "${DEST}" ]; then
   mkdir -p "${BACKUP_ROOT}"
   mv "${DEST}" "${BACKUP}"
   info "new version: ${NEW_VER:-unknown}"
+
+  # 备份只保留最近 3 份（评审 R13）：重复安装是常态，无限增长的 .bak.<时间戳>
+  # 会悄悄吃掉磁盘。只清理本脚本自己命名出来的备份，别的一律不碰。
+  KEEP_BACKUPS=3
+  old_backups="$(ls -1 "${BACKUP_ROOT}" 2>/dev/null | grep "^${SKILL_NAME}\.bak\." | sort -r || true)"
+  to_prune="$(printf '%s\n' "$old_backups" | tail -n +$((KEEP_BACKUPS + 1)))"
+  if [ -n "$to_prune" ]; then
+    while IFS= read -r stale; do
+      [ -n "$stale" ] || continue
+      rm -rf "${BACKUP_ROOT}/${stale}" && info "pruned old backup (kept newest ${KEEP_BACKUPS}): ${stale}"
+    done <<< "$to_prune"
+  fi
 fi
 
 mkdir -p "${DEST}"

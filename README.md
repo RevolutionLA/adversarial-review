@@ -28,18 +28,20 @@
 >
 > 上面三个错都是我写的，全部由这个流程自己抓出，每条处置都有可复查的证据链（`docs/review/` 四份报告，本地保留）。
 >
-> **30 秒看懂它怎么工作**：读一份带完整证据链的[真实评审样例](skills/adversarial-review/examples/sample-review.md)。
+> **30 秒看懂它怎么工作**：读一份带完整证据链的[真实评审样例](skills/adversarial-review/examples/sample-review.md)（v2.0 时的产出，按现行规则机检会判红，原因写在里面），或看一份符合现行规则的[合规样例](skills/adversarial-review/examples/sample-review-v2.2.md)。
 
-### 眼见为实：门禁**能**失败，这两段是刚跑出来的真实输出
+### 眼见为实：门禁**能**失败，这三段是刚跑出来的真实输出
 
 不是示意图，不是"我们很注重质量"这类话。检查有没有价值，唯一的标准是它**能不能变红**。
 
-**① 把那个"修 A 引入 B"的确切缺陷重新塞回去 → 提交被拒绝**
+> 下面三段都是在**临时副本**里跑的（`cp -r` 一份再改），别在自己的工作区里注入缺陷。命令与输出**逐字粘贴**，唯一的删减是：①里过滤了通过的 `✅` 行、并把 7 条失败行截到 4 条（`结果: 17 通过, 7 失败` 这一行是完整的）。
+
+**① 把那个"修 A 引入 B"的确切缺陷重新塞回去 → 门禁 exit 1，提交进不去**
 
 ```bash
-# 复现：重新注入 v2.0.1 的语义反转（folded 分支条件改成 literal），然后 git commit
-sed -i 's/blockStyle === "folded"/blockStyle === "literal"/' scripts/validate-skill.mjs
-git add -A && git commit -m "demo: injected regression"; echo "exit=$?"
+# 复现：重新注入 v2.0.1 的语义反转（折叠分支的条件改成语义互换的字面分支）
+sed -i 's/if (blockStyle === "folded")/if (blockStyle === "literal")/' scripts/validate-skill.mjs
+bash .githooks/pre-commit 2>&1 | grep -v "^  ✅"; echo "exit=${PIPESTATUS[0]}"
 ```
 
 ```text
@@ -50,9 +52,13 @@ validate-skill.mjs 回归测试
       折叠块不应含 \n，实际: "line one here\nline two here"
   ✗ 字面块结果应保留换行符
       字面块应含 \n，实际: "line one here line two here"
+  ✗ 折叠块里的空行是段落分隔，应折成一个换行（评审 R5）
+      空行应折成恰好一个 \n（段落分隔），实际: "line one here\n\nline two here"
+  ✗ 字面块里的 # 开头行是内容，不得当注释丢弃（评审 R5）
+      # 行被丢弃或错位，实际: "heading # not a comment tail"
   ✗ 块标量之后紧跟另一个块标量，状态不应残留
       description 应是折叠块（不含 \n），实际 "folded one\nfolded two"
-结果: 17 通过, 3 失败
+结果: 17 通过, 7 失败
 [pre-commit] ✗ 回归测试未通过 —— 禁止提交（这正是本项目两次事故的根因）
 exit=1
 ```
@@ -60,44 +66,45 @@ exit=1
 **② 代码一个字不动，只把文档里的一个数字改歪 → 第五道门禁变红**
 
 ```bash
-# 复现：把 README 的"正文 171 行"改成"正文 180 行"（SKILL.md 完全没动）
-sed -i 's/正文 171 行/正文 180 行/' README.md
-node scripts/check-docs.mjs; echo "exit=$?"
+# 复现：把 README 的"正文 173 行"改成"正文 180 行"（SKILL.md 完全没动）
+sed -i 's/正文 173 行/正文 180 行/' README.md
+node scripts/check-docs.mjs 2>&1 | grep -E "^check-docs:|^  ✗"; echo "exit=${PIPESTATUS[0]}"
 ```
 
 ```text
-check-docs: SKILL.md 实测 总 180 行 / frontmatter 9 行 / 正文 171 行；设计要点表 13 条
-  ✅ README.md:374 主张 SKILL.md 总行数 = 180（原文"（180 行"） ✅
-  ✅ README.en.md:380 主张 SKILL.md 总行数 = 180（原文"(180 lines"） ✅
-  ✅ README.en.md:380 主张 SKILL.md 正文行数 = 171（原文"171 of body"） ✅
-  ✅ skills/adversarial-review/references/skill-spec.md:31 主张 SKILL.md 正文行数 = 171（原文"正文 171 行"） ✅
-  ✅ skills/adversarial-review/references/quickstart.md:72 主张「设计要点」表为 13 条 ✅（实测 13）
-  ✅ CHANGELOG.md:19 主张「设计要点」表为 13 条 ✅（实测 13）
-  ✗ README.md:374 主张 SKILL.md 正文行数 = 180（原文"正文 180 行"） —— 实测 正文行数为 171
+check-docs: SKILL.md 实测 总 182 行 / frontmatter 9 行 / 正文 173 行；设计要点表 13 条；维度 19 项；门禁 6 道；用例 校验器 24 / 机检器 15；突变 18 条；版本 2.3.0
+  ✗ README.md:397 主张 SKILL.md 正文行数 = 180（原文"正文 180 行"） —— 实测 正文行数为 173
 check-docs: 1 处文档主张与实况不符
 exit=1
 ```
 
-第二段就是 `check-docs.mjs` 上线当晚抓到的那类问题（**作者写的数字过期了，其余门禁全绿**）。它当时是真的让我提交失败了一次。
+第一段就是 `check-docs.mjs` 上线当晚抓到的那类问题（**作者写的数字过期了，其余门禁全绿**）。它当时是真的让我提交失败了一次。v2.3 起它对账的不只是行数：维度条数、门禁道数、"第 N 道门禁"点名的脚本对不对、两套回归测试的用例数、突变注入条数、`SKILL.md` 与 CHANGELOG 的版本号、以及下面第三节里安装命令锚的 tag——**改一处忘一处，就提交不了**。
 
-**③ v2.2 新增的报告机检器，上线第一件事是把我们自己的历史样例判红**
+**③ 报告机检器：历史样例判红，v2.3 新增的合规样例判绿**
 
 ```bash
-# 机检蓝军总表：未实测却定高危、缺「定级依据」列、位置列为空 → 失败
+# 机检蓝军总表：声称实测的高危，必须在自己那一节的展开段落里贴出复现命令与真实输出
 node skills/adversarial-review/scripts/check-report.mjs \
   skills/adversarial-review/examples/sample-review.md
+node skills/adversarial-review/scripts/check-report.mjs \
+  skills/adversarial-review/examples/sample-review-v2.2.md
 ```
 
 ```text
 check-report: skills/adversarial-review/examples/sample-review.md
-  ✗ 2 条声称"实测"的条目，但报告中只出现 1 处「复现命令」—— 声称实测必须逐条给出可原样重跑的命令与输出（缺：B1、B2）
-check-report: 1 处不符合 v2.2.0「未经实测不得定高危」约束
+  ✗ B1：声称实测，但自己的展开段落里没有「复现命令」 —— 只在总表里写"实测"两个字不构成证据
+  ✗ B2：声称实测，但自己的展开段落里没有「复现命令」 —— 只在总表里写"实测"两个字不构成证据
+check-report: 2 处不符合「未经实测不得定高危」约束（高危须逐条取证）
 exit=1
+check-report: skills/adversarial-review/examples/sample-review-v2.2.md
+check-report: 4 条缺陷（第 29 行的总表），3 条声称实测（其中高危 2 条），逐条取证通过（全文有效「复现命令」2 处）
+exit=0
 ```
 
-这份样例产于 v2.2 规则之前，所以它**理应当红**——机检器不给历史面子，也不给作者面子。它的回归测试（11 个用例）里同时有 2 个绿用例，防止它退化成"什么都判红"。
+旧样例产于 v2.2 规则之前，所以它**理应当红**——机检器不给历史面子，也不给作者面子；它的回归测试（`scripts/test-check-report.mjs`，15 用例，其中 3 个绿锚）防止它退化成"什么都判红"。
+**而 v2.3 把取证方式改成了"逐条就近"**：此前它只数全文出现了几次「复现命令」四个字，外部评审证明**往正文任意一处写进这四个字，就能放行任意多条编造的高危**——计数型校验天生可被凑数满足。现在每条高危必须在自己的段落里给出真实命令与输出，共用、空标题、只写标签都不算证据。
 
-> 上面输出的行号（`README.md:374`）会随文档增删而变——**行号引用会腐烂**这件事本身就是本 skill 的第 17 维度（文档一致性）反复抓到的缺陷，所以我们把它显式标出来，而不是假装它是常量。这段输出本次改文档后**重新跑过一遍**才贴上来，不是手改的数字。
+> 上面输出的行号（`README.md:397`）会随文档增删而变——**行号引用会腐烂**这件事本身就是本 skill 的第 17 维度（文档一致性）反复抓到的缺陷，所以我们把它显式标出来，而不是假装它是常量。这三段输出在本次改完文档后**又各自重跑了一遍**才贴上来，不是手改的数字。
 
 ---
 
@@ -191,19 +198,34 @@ Copy-Item -Recurse -Force ".\adversarial-review\skills\adversarial-review" "$env
 
 ### 方式三：一行安装脚本
 
+脚本锚定在**已评审的发布版本**上（`v2.3.0`），不指向 `main`——一行流装的是"你看不见的当下最新"，而 `main` 上任何一次未评审的提交都会顺着管道进你的 skill 目录。
+
+**先看再跑**（两步，30 秒）：
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/RevolutionLA/adversarial-review/main/skills/adversarial-review/scripts/install.sh | bash
+# 第 1 步：先把脚本读一遍（它会写到哪个目录、动了你已有的安装怎么办，全在里头）
+curl -fsSL https://raw.githubusercontent.com/RevolutionLA/adversarial-review/v2.3.0/skills/adversarial-review/scripts/install.sh | less
+```
+
+```bash
+# 第 2 步：确认无误后再执行
+curl -fsSL https://raw.githubusercontent.com/RevolutionLA/adversarial-review/v2.3.0/skills/adversarial-review/scripts/install.sh | bash
 ```
 
 <details>
 <summary>Windows (PowerShell)</summary>
 
 ```powershell
-irm https://raw.githubusercontent.com/RevolutionLA/adversarial-review/main/skills/adversarial-review/scripts/install.ps1 | iex
+# 第 1 步：先看
+irm https://raw.githubusercontent.com/RevolutionLA/adversarial-review/v2.3.0/skills/adversarial-review/scripts/install.ps1 | more
+# 第 2 步：再跑
+irm https://raw.githubusercontent.com/RevolutionLA/adversarial-review/v2.3.0/skills/adversarial-review/scripts/install.ps1 | iex
 ```
 </details>
 
-> 已有安装时，脚本会把旧副本**备份到 skills 目录之外的 `skill-backups/`** 再覆盖——你本地的自定义修改不会丢，备份也不会滞留成"抢路由的幽灵 skill"。
+> 这个版本号不是手写的：`check-docs.mjs` 会把上面两条 URL 里的 `v2.3.0` 与 CHANGELOG 最新版本号对账，改一处忘另一处就提交不了。
+
+> 已有安装时，脚本会把旧副本**备份到 skills 目录之外的 `skill-backups/`** 再覆盖——你本地的自定义修改不会丢，备份也不会滞留成"抢路由的幽灵 skill"。备份只保留最近 3 份。
 
 ### 验证安装
 
@@ -275,7 +297,7 @@ docs/review/
 └─ ADJUDICATION-<version>.md        # 中立裁定：最终裁定 + 共同前提审查 + 合并执行清单
 ```
 
-教学样例见 [`examples/sample-review.md`](skills/adversarial-review/examples/sample-review.md)。
+教学样例两份：[`examples/sample-review.md`](skills/adversarial-review/examples/sample-review.md)（真实产出，规则之前）与 [`examples/sample-review-v2.2.md`](skills/adversarial-review/examples/sample-review-v2.2.md)（符合现行规则、能过机检器）。
 
 > **注意**：评审记录默认**不入库**（见 `.gitignore` 中的 `/docs/review/`）。它们包含未修复问题的细节与内部实现信息，适合留在本地。若你的项目想把它作为质量流程展示，删掉那行并正常提交即可。
 
@@ -316,14 +338,15 @@ docs/review/
 | **v2.0 第三方** | 整改文档里的"已修复"声明**是假的**（blob 哈希证伪）；CI 有个步骤**名实不符**；新增测试有 5 个突变逃逸 |
 | **v2.0.2 中立裁定** | **修 bug 引入了新 bug**——`>` 与 `|` 解析语义被对调，而该提交**自带测试是红的却照常提交了**；安装验证脚本**向用户报假的"通过"** |
 | **v2.1.0 两轮完整闭环** | 蓝军 11 条（"已落实三个模板"不实、安装副本停留 v2.0、备份抢路由……）→ 第三方 14 条证明**第一轮整改只算部分落地**、`verify-install` 裸跑对旧副本报"🎉 通过"、**四道门禁对这批缺陷全部零覆盖** → 裁定方改判 2 条降级、驳回 1 条建议，并当场实施第五道门禁 |
+| **v2.2.0 外部评审（15 条）** | 评审方用一份**按我们自己的规则写成、机检器却放行**的报告证明：v2.2 那台"必须贴复现命令"的机检器只在全局**数关键字出现次数**，正文里出现一次「复现命令」四个字 = 任意多条编造高危 `exit 0`。**计数型校验都能被凑字数满足。** 其余 14 条包括 CI 少了第六道门禁、折叠块空行语义与注释不符、`curl \| bash` 指向可变的 `main` |
 
 ### 由此引入的质量设施
 
 - **`.githooks/pre-commit` 门禁（六道）** —— 回归测试 + 突变测试 + 规范校验 + 链接检查 + 文档主张守护 + 报告机检器测试，任一失败即拒绝提交。已用破坏性测试验证它真能拦住。（启用：`git config core.hooksPath .githooks`）
-- **文档主张守护**（`scripts/check-docs.mjs`，v2.1 新增）—— 从 CHANGELOG/README 提取"SKILL.md 多少行""设计要点几条"这类**数字主张**，与实测比对，不符即红。**它上线第一次实战就抓到作者自己的行数漂移**（175→177 未同步）。围栏代码块内逐字引用的工具输出**不**算主张（否则本 README 无法演示它自己怎么变红），但正文照扫，且有一条兜底：正文里至少要有两组行数主张被提取到，提取覆盖度掉了同样报错。
-- **报告机检器**（`skills/adversarial-review/scripts/check-report.mjs`，v2.2 新增，**随 skill 一起安装**）—— 机检蓝军总表：🔴/🟠 的「定级依据」必须是实测、声称实测的条目须逐条配「复现命令」、位置列不许为空。**为什么非要有它**：`必须实证` 四个字是散文约束，模型想让结论显得够重要时会直接声称"我跑过了"；只有把定级和实测绑定、再让第三方原样重跑，编造才会变成**可发现的缺陷**。它的回归测试（11 用例 = 2 绿 + 9 红，每个用例既断言退出码也断言报错文本）构成第六道门禁。
-- **突变测试**（`scripts/test-mutations.mjs`）—— 自动往代码里注入 11 个缺陷，验证回归测试**能不能抓住**。当前 **10 抓住 / 0 逃逸 / 1 等价突变**。
-  - **为什么需要它**：测试全绿 ≠ 测试有效。本项目的回归测试曾漏掉 5 个突变，其中"删掉长度上限校验"会让一个**1235 字符的非法 description 被判通过**。
+- **文档主张守护**（`scripts/check-docs.mjs`，v2.1 新增，v2.3 扩容）—— 从 CHANGELOG/README 提取"SKILL.md 多少行""设计要点几条""门禁几道""回归测试几个用例""install 一行流钉在哪个 tag"这类**数字主张**，与实测比对，不符即红。**它上线第一次实战就抓到作者自己的行数漂移**（175→177 未同步）。围栏代码块内逐字引用的工具输出**不**算主张（否则本 README 无法演示它自己怎么变红），但正文照扫，且有一条兜底：正文里至少要有两组行数主张被提取到，提取覆盖度掉了同样报错。v2.3 起它自己带一段**抽取器自检**（合成语料喂给抽取函数，要求该抓的必须抓到），因为"跳过规则"本身也会被人改坏。`scripts/test-validate-skill.mjs` 有 24 个用例、`scripts/test-check-report.mjs` 有 15 个用例，这两处的数字也由它守住。
+- **报告机检器**（`skills/adversarial-review/scripts/check-report.mjs`，v2.2 新增、v2.3 重构取证方式，**随 skill 一起安装**）—— 机检蓝军总表：🔴/🟠 的「定级依据」必须是实测、每条声称实测的高危须**就近**配「复现命令」+ 真实输出、位置列不许为空。**为什么非要有它**：`必须实证` 四个字是散文约束，模型想让结论显得够重要时会直接声称"我跑过了"；只有把定级和实测绑定、再让第三方原样重跑，编造才会变成**可发现的缺陷**。它的回归测试（`scripts/test-check-report.mjs`，15 用例 = 3 绿 + 11 红 + 1 用法错误，每个用例既断言退出码也断言报错文本）构成第六道门禁。
+- **突变测试**（`scripts/test-mutations.mjs`）—— 自动往代码里注入 18 个缺陷（校验器 12 + 报告机检器 6），验证两套测试**能不能抓住**。最近一次实跑：**17 抓住 / 0 逃逸 / 1 等价突变 / 0 无效突变**；突变只作用于临时副本，不碰工作区文件。
+  - **为什么需要它**：测试全绿 ≠ 测试有效。本项目的回归测试曾漏掉 5 个突变，其中"删掉长度上限校验"会让一个**1235 字符的非法 description 被判通过**。v2.3 起被突变的对象还包括**报告机检器自己**——一个只会放过合规报告的机检器，和没有机检器一样危险。
 - **Agent Skills 规范校验器**（`scripts/validate-skill.mjs`）—— 零依赖，可作为通用工具用于你自己的 skill。
 
 ---
@@ -371,7 +394,7 @@ docs/review/
 
 ## 仓库结构
 
-主文件 `SKILL.md`（180 行，其中 frontmatter 之后的正文 171 行）——这两个数字不是手写的，`check-docs.mjs` 会实测对账，写错就提交不了。
+主文件 `SKILL.md`（182 行，其中 frontmatter 之后的正文 173 行）——这两个数字不是手写的，`check-docs.mjs` 会实测对账，写错就提交不了。
 
 ```
 adversarial-review/
@@ -380,21 +403,23 @@ adversarial-review/
 │   └── adversarial-review/          ← skill 本体（skills.sh 规范结构）
 │       ├── SKILL.md                 ← 主文件
 │       ├── references/
-│       │   ├── review-dimensions.md ← 19 维度清单
+│       │   ├── review-dimensions.md ← 维度清单
 │       │   ├── prompt-templates.md  ← 三角色提示词模板
 │       │   ├── quickstart.md
 │       │   └── skill-spec.md        ← SKILL.md 规范速查
-│       ├── examples/sample-review.md
+│       ├── examples/                ← 一份合规样例 + 一份规则之前的历史样例
 │       └── scripts/                 ← 安装、验证与报告机检脚本（随 skill 安装）
 ├── scripts/                         ← 仓库级工具（不随 skill 安装）
 │   ├── validate-skill.mjs           ← Agent Skills 规范校验器
-│   ├── test-validate-skill.mjs      ← 校验器回归测试（20 用例）
-│   ├── test-check-report.mjs        ← 报告机检器的回归测试（11 用例）
-│   ├── test-mutations.mjs           ← 突变测试
+│   ├── test-validate-skill.mjs      ← 校验器回归测试
+│   ├── test-check-report.mjs        ← 报告机检器的回归测试
+│   ├── test-mutations.mjs           ← 突变测试（两个靶子）
 │   ├── check-docs.mjs               ← 文档数字主张守护
 │   └── check-links.mjs              ← markdown 链接检查
 └── .githooks/pre-commit             ← 提交门禁
 ```
+
+> 结构树里刻意**不写用例数**：代码块内的数字这条守护看不见，写在这儿就成了没人守的孤儿主张。用例数只出现在上文「由此引入的质量设施」里那两处**带脚本文件名**的句子上——带文件名才能被 `check-docs.mjs` 就近认账。
 
 ---
 

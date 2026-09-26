@@ -20,6 +20,9 @@ jobs:
       - name: 校验器自身的回归测试
         run: node scripts/test-validate-skill.mjs
 
+      - name: 报告机检器的回归测试（六道门禁里的第六道，此前只接在本地 pre-commit）
+        run: node scripts/test-check-report.mjs
+
       - name: 突变测试（验证回归测试真的能抓住缺陷）
         run: node scripts/test-mutations.mjs
 

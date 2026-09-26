@@ -5,7 +5,7 @@
 // 断言"文档里写的行数/条数 == 实际内容"。本版把三处数字改对了，但若不补
 // 一条守护，下一次 SKILL.md 增删一行就会再次失真，而其余门禁依旧全绿。
 //
-// 本检查做两件事（不一致即 exit 1）：
+// 本检查做的事（不一致即 exit 1）：
 //  1. 从 README.md / README.en.md 结构树、CHANGELOG.md **最新条目**、
 //     skill-spec.md 中提取对 SKILL.md 的"总行数 / 正文行数（frontmatter 之后）"
 //     主张，与实测值逐一对账；
@@ -18,10 +18,18 @@
 //    "展示门禁如何失败"的文档永远无法自洽。作者的主张写在正文里，正文照扫。
 //  - CHANGELOG 只扫最新 `## [x.y.z]` 条目，历史条目中的旧数字（如 2.0.x
 //    时代的"255 行"）不参与对账；
-//  - 同一行必须提到 `SKILL.md` 才算主张所在行；含"不再/已过期/原为"等
-//    历史叙述标记的行跳过；带引号转述旧文本的行（CHANGELOG:21「11 条
-//    约束表」是对**改前** quickstart 的引用）跳过——条数主张只对
-//    quickstart 现行文本与 CHANGELOG"表扩为 N 条"句式生效。
+//  - 同一行必须提到 `SKILL.md` 才算主张所在行；历史叙述按「历史叙述判定」处理。
+//
+// v2.3.0 扩容（外部评审 R8/R11/R12，评审方 docs/REVIEW-2.2.0.md）：
+//  3. 维度条数（review-dimensions.md 实际行数）、门禁道数与"第 N 道门禁 = 哪个脚本"
+//     （从 .githooks/pre-commit 现场解析，插一道进去，文档就会变红）；
+//  4. 两套回归测试的用例数、突变测试的注入条数（按被测脚本名就近对账）；
+//  5. SKILL.md 的 version == CHANGELOG 最新条目版本号；README 的 `install.sh|ps1`
+//     一行流必须钉在**当前版本的 tag** 上，不许指向 main（R12：main 会装到未评审代码）；
+//  6. R8：`改为/减到/降至` 一类词**不再整行跳过**，改为"只认该词之后的数字为现状，
+//     之前的数字是历史"。整行跳过曾让"作者改掉措辞、数字仍是旧的"这类句子免检。
+//     本文件末尾带一段**抽取器自检**（合成语料喂给抽取函数，要求该抓的必须抓到），
+//     自检不过同样 exit 1——否则这些规则只是这次改对了，下次改坏无人知。
 
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -35,6 +43,11 @@ const SPEC_MD = join(ROOT, "skills/adversarial-review/references/skill-spec.md")
 const README_MD = join(ROOT, "README.md");
 const README_EN_MD = join(ROOT, "README.en.md");
 const CHANGELOG_MD = join(ROOT, "CHANGELOG.md");
+const DIMENSIONS_MD = join(ROOT, "skills/adversarial-review/references/review-dimensions.md");
+const PRECOMMIT = join(ROOT, ".githooks/pre-commit");
+const TEST_VALIDATOR = join(ROOT, "scripts/test-validate-skill.mjs");
+const TEST_REPORTLINT = join(ROOT, "scripts/test-check-report.mjs");
+const TEST_MUTATIONS = join(ROOT, "scripts/test-mutations.mjs");
 
 const read = (f) => readFileSync(f, "utf8").replace(/\r\n/g, "\n");
 const rel = (f) => f.slice(ROOT.length + 1).replace(/\\/g, "/");
@@ -68,7 +81,12 @@ const actualBody = actualTotal - fmEnd;
 
 // ---------- 主张提取：行数 ----------
 
-const HISTORICAL = /不再|已过期|原为|曾写|此前|历史上|随.*(更新|修正)|减薄|减到|改为/;
+// 只在**明确转述旧文本**时跳过整行。v2.2 之前这里还包含 `改为|减到|减薄|降至`
+// 并且是"整行丢弃"，那是个漏洞：作者写"措辞调整后 SKILL.md 正文 120 行"，
+// 整行免检、过期数字照样蒙混过关（外部评审 R8）。现在这类过渡词只把**其前**的
+// 数字判为历史，其后的数字仍按现状主张对账。
+const HISTORICAL = /不再|已过期|原为|曾写|此前|历史上/;
+const RESTATE = /改为|减到|减至|降至|升到|升至|扩到|扩至|调整为/;
 
 /**
  * 从一行文本中提取对 SKILL.md 的行数主张。
@@ -77,6 +95,11 @@ const HISTORICAL = /不再|已过期|原为|曾写|此前|历史上|随.*(更新
 function claimsInLine(line) {
   if (!/SKILL\.md/.test(line)) return [];
   if (HISTORICAL.test(line)) return [];
+  if (RESTATE.test(line)) {
+    // 过渡词**之前**的数字是旧值，之后才是现状主张。丢掉前半句时保留 SKILL.md 锚点，
+    // 否则下面的宽松式（要求行内出现 SKILL.md）会连现状主张一起提不出来。
+    line = "SKILL.md…" + line.slice(RESTATE.exec(line).index);
+  }
   const out = [];
   // 中文："（175 行，其中正文 166 行）" / "正文 166 行"
   const zhTotal = line.match(/（(\d{2,4})\s*行/);
@@ -211,9 +234,272 @@ if (dpHits.quickstart < 1) {
   failures.push(`提取错位防护触发：quickstart.md 未提取到任何"N 条约束"主张（引用句式可能已变更）`);
 }
 
+// ---------- v2.3.0 新增对账：维度数 / 门禁 / 用例数 / 版本 / 安装锚点 ----------
+
+function scanBody(file, text, cb) {
+  const lines = text.split("\n");
+  const inFence = fencedMask(lines);
+  for (let i = 0; i < lines.length; i++) if (!inFence[i]) cb(lines[i], i + 1);
+}
+
+const CN_NUM = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
+const EN_NUM = {
+  one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  first: 1, second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6, seventh: 7, eighth: 8, ninth: 9, tenth: 10,
+};
+const toNum = (s) =>
+  CN_NUM[s] ?? EN_NUM[typeof s === "string" ? s.toLowerCase() : s] ?? (Number.isNaN(+s) ? null : +s);
+
+/**
+ * 描述"某一版本当时的状况"的历史叙述行——即战绩表里以版本号开头的行。
+ * 这里刻意只用"行首版本号"这一条判据，不用"行内出现过 v2.2"：
+ * 后者会让"v2.2 新增的机检器，其回归测试有 N 个用例"这类**既提版本又陈述现状**
+ * 的句子整行免检（正是 R8 要堵的那类漏洞）。
+ */
+const HISTORY_ROW = /^\s*\|\s*\*\*?v\d+\.\d+/;
+
+function dimensionCount() {
+  const rows = read(DIMENSIONS_MD).split("\n").filter((l) => /^\|\s*\d+\s*\|\s*\*\*/.test(l));
+  if (rows.length === 0) {
+    failures.push(`${rel(DIMENSIONS_MD)} 未解析到任何维度行 —— 提取错位`);
+    return null;
+  }
+  return rows.length;
+}
+
+/** pre-commit 里 node 门禁的顺序（"第 N 道门禁"主张的对照表） */
+function gateList() {
+  const src = read(PRECOMMIT);
+  const gates = [...src.matchAll(/^if ! node\s+\S*?([\w-]+\.mjs)/gm)].map((m) => m[1]);
+  if (gates.length < 2) {
+    failures.push(`${rel(PRECOMMIT)} 只解析到 ${gates.length} 道 node 门禁 —— 提取错位`);
+    return null;
+  }
+  return gates;
+}
+
+const actualDims = dimensionCount();
+const actualGates = gateList();
+const countRegistrations = (file, re) =>
+  read(file).split("\n").filter((l) => re.test(l)).length;
+const actualCases = {
+  "test-validate-skill.mjs": countRegistrations(TEST_VALIDATOR, /^check\(|^checkSemantics\(/),
+  "test-check-report.mjs": countRegistrations(TEST_REPORTLINT, /^t\(/),
+};
+const actualMutations = countRegistrations(TEST_MUTATIONS, /^\s+name:\s*"/);
+
+const versionOf = (text) => /(?:^|\n)\s*version:\s*"?(\d+\.\d+\.\d+)"?/.exec(text)?.[1] ?? null;
+const skillVersion = versionOf(skillText);
+const changelogVersion = /^\s*##\s*\[(\d+\.\d+\.\d+)\]/m.exec(read(CHANGELOG_MD))?.[1] ?? null;
+
+const hits = { dims: 0, gateCount: 0, cases: 0, installUrl: 0 };
+const caseSuiteHits = { "test-validate-skill.mjs": 0, "test-check-report.mjs": 0 };
+const assert = (file, lineNo, label, actual, claimed, hitKey) => {
+  if (hitKey) hits[hitKey]++;
+  if (actual === null) return;
+  if (claimed !== actual) {
+    failures.push(`${rel(file)}:${lineNo} 主张 ${label} = ${claimed} —— 实测为 ${actual}`);
+  } else {
+    checked.push(`${rel(file)}:${lineNo} 主张 ${label} = ${claimed} ✅`);
+  }
+};
+
+/** 在 lineNo 之后的 lookahead 行里找脚本名（允许落在演示代码块内——那正是锚点所在） */
+function scriptNearby(lines, lineNo, lookahead = 4) {
+  for (let i = lineNo - 1; i < Math.min(lines.length, lineNo - 1 + lookahead); i++) {
+    const m = /([\w-]+\.mjs)/.exec(lines[i]);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+const GATE_CN_COUNT = /(?<!第)([一二三四五六七八九十]{1,3}|\d{1,3})\s*道门禁/g;
+const GATE_CN_COUNT_PAREN = /门禁（([一二三四五六七八九十]{1,3}|\d{1,3})\s*道）/g;
+const GATE_CN_ORD = /第([一二三四五六七八九十]{1,3}|\d{1,3})道门禁/;
+const GATE_EN_COUNT = /\(\s*(one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s+(?:checks|gates)\s*\)/gi;
+const GATE_EN_ORD = /\b(?:the|as)\s+(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|\d+)\s+gate\b/i;
+const CASE_CLAIM = /(\d{1,3})\s*(?:个)?\s*用例/;
+const GREEN_RED = /(\d{1,3})\s*绿\s*[+＋]\s*(\d{1,3})\s*红(?:\s*[+＋]\s*(\d{1,3})\s*用法错误)?/;
+// "第 17 维度"是**序数**（第 17 号维度），不是条数主张。回溯排除时要把
+// 位数也吃进去，否则正则会退一步从"7 维度"匹配出个假主张。
+const DIM_CLAIM = /(?<!第[\s\d]*)(\d{1,3})\s*个?\s*(?:core\s+)?维(?:度|项)/gi;
+const DIM_EN_CLAIM = /(?<!第[\s\d]*)(\d{1,3})\s*(?:-|\s)?dimension(?:s)?\b/gi;
+
+/**
+ * 中文/ASCII 引号覆盖的字符区间。引号里是**转述别人的旧措辞**
+ * （CHANGELOG 常写：把"其余四道门禁全绿"改为"其余门禁全绿"），
+ * 不是作者对现状的主张——不排掉它，"改措辞"这条正常陈述永远无法自洽。
+ */
+function quoteSpans(line) {
+  const spans = [];
+  const pairs = [["“", "”"], ["「", "」"], ['"', '"'], ["'", "'"]];
+  for (const [open, close] of pairs) {
+    let from = 0;
+    for (;;) {
+      const i = line.indexOf(open, from);
+      if (i === -1) break;
+      const j = line.indexOf(close, i + 1);
+      if (j === -1) break;
+      spans.push([i, j]);
+      from = j + 1;
+    }
+  }
+  return spans;
+}
+const inQuote = (spans, idx) => spans.some(([a, b]) => idx >= a && idx <= b);
+
+function scanNumericClaims(file, text, { lineOffset = 0 } = {}) {
+  const lines = text.split("\n");
+  const body = [];
+  scanBody(file, text, (line, no) => body.push([line, no]));
+  for (const [line, rawNo] of body) {
+    const no = rawNo + lineOffset;
+    if (HISTORY_ROW.test(line)) continue;
+    const quotes = quoteSpans(line);
+    const fresh = (m) => !inQuote(quotes, m.index);
+
+    for (const re of [GATE_CN_COUNT, GATE_CN_COUNT_PAREN, GATE_EN_COUNT]) {
+      re.lastIndex = 0;
+      for (const m of line.matchAll(re)) {
+        if (!fresh(m)) continue;
+        assert(file, no, "门禁道数", actualGates ? actualGates.length : null, toNum(m[1]), "gateCount");
+      }
+    }
+    const ord = GATE_CN_ORD.exec(line) ?? GATE_EN_ORD.exec(line);
+    if (ord && !inQuote(quotes, ord.index) && actualGates) {
+      const idx = toNum(ord[1]);
+      const label = `第 ${idx} 道门禁`;
+      if (!(idx >= 1 && idx <= actualGates.length)) {
+        failures.push(`${rel(file)}:${no} ${label} 越界 —— 当前共 ${actualGates.length} 道`);
+      } else {
+        const gate = actualGates[idx - 1];
+        const scripts = [gate, gate.replace(/^test-/, "")];
+        const named = /\.mjs/.test(line) ? line.match(/[\w-]+\.mjs/g) : [scriptNearby(lines, rawNo)].filter(Boolean);
+        const clash = named.filter((s) => !scripts.includes(s));
+        if (named.length && clash.length === named.length) {
+          failures.push(
+            `${rel(file)}:${no} ${label} 实为 ${gate}，但就近文本点名的脚本是 ${clash.join("、")}`
+          );
+        } else {
+          checked.push(`${rel(file)}:${no} ${label} = ${gate} ✅`);
+        }
+      }
+    }
+
+    for (const m of line.matchAll(DIM_CLAIM)) {
+      if (!fresh(m)) continue;
+      assert(file, no, "维度条数", actualDims, +m[1], "dims");
+    }
+    for (const m of line.matchAll(DIM_EN_CLAIM)) {
+      if (!fresh(m)) continue;
+      assert(file, no, "维度条数", actualDims, +m[1], "dims");
+    }
+
+    const suite = Object.keys(actualCases).find((s) => line.includes(s));
+    if (suite) {
+      const cm = CASE_CLAIM.exec(line);
+      if (cm && fresh(cm)) {
+        caseSuiteHits[suite]++;
+        assert(file, no, `${suite} 用例数`, actualCases[suite], +cm[1], "cases");
+      }
+      const gr = GREEN_RED.exec(line);
+      if (gr && fresh(gr)) {
+        caseSuiteHits[suite]++;
+        assert(file, no, `${suite} 绿+红（+用法错误）合计`,
+          actualCases[suite], +gr[1] + +gr[2] + +(gr[3] || 0), "cases");
+      }
+    }
+    if (line.includes("test-mutations.mjs")) {
+      const mc = /(\d{1,3})\s*个(?:缺陷|突变)/.exec(line);
+      if (mc && fresh(mc)) assert(file, no, "突变注入条数", actualMutations, +mc[1], null);
+    }
+    // 「抓住 / 逃逸 / 等价」是对**某一次运行结果**的陈述，静态对不了账，
+    // 只能靠提交前重跑突变测试并把真实输出贴进 CHANGELOG。这里刻意不猜。
+  }
+
+  // install 一行流：URL 在 ```bash 代码块里，但那是**给读者复制的指令**，
+  // 不是逐字引用的工具输出，所以它必须参与对账（R12：钉在已评审的 tag 上）。
+  lines.forEach((line, i) => {
+    for (const m of line.matchAll(/https?:\/\/\S+/g)) {
+      if (!/^https?:\/\/raw\.githubusercontent\.com\/[^/\s]+\/[^/\s]+\/[^/\s]+\/.*install\.(sh|ps1)/.test(m[0])) continue;
+      hits.installUrl++;
+      const ref = m[0].split("/")[5];
+      const want = changelogVersion ? `v${changelogVersion}` : null;
+      assert(file, i + 1 + lineOffset, "install 一行流锚定的 ref", want, ref, null);
+    }
+  });
+}
+
+scanNumericClaims(README_MD, read(README_MD));
+scanNumericClaims(README_EN_MD, read(README_EN_MD));
+scanNumericClaims(QUICKSTART_MD, read(QUICKSTART_MD));
+scanNumericClaims(DIMENSIONS_MD, read(DIMENSIONS_MD));
+scanNumericClaims(CHANGELOG_MD, clLatest.text, { lineOffset: clLatest.offset });
+
+// 版本一致性：SKILL.md 的 version 必须等于 CHANGELOG 最新条目
+if (!skillVersion) failures.push(`${rel(SKILL_MD)} frontmatter 未解析到 version —— 提取错位`);
+if (!changelogVersion) failures.push(`${rel(CHANGELOG_MD)} 未解析到最新 ## [x.y.z] 条目 —— 提取错位`);
+if (skillVersion && changelogVersion && skillVersion !== changelogVersion) {
+  failures.push(
+    `版本漂移：SKILL.md 声明 ${skillVersion}，CHANGELOG 最新条目为 ${changelogVersion}`
+  );
+} else if (skillVersion) {
+  checked.push(`SKILL.md version == CHANGELOG 最新条目 = ${skillVersion} ✅`);
+}
+
+// 提取错位防护（新主张组）：句式一改、覆盖就悄悄归零，这里要求它必须仍有贡献
+for (const [key, need, what] of [
+  ["dims", 1, "维度条数"],
+  ["gateCount", 1, "门禁道数"],
+  ["installUrl", 2, "install 一行流 ref"],
+]) {
+  if (hits[key] < need) {
+    failures.push(`提取错位防护触发：应提取到至少 ${need} 条「${what}」主张，实际 ${hits[key]} 条（文档句式可能已变更）`);
+  }
+}
+for (const suite of Object.keys(actualCases)) {
+  if (caseSuiteHits[suite] < 1) {
+    failures.push(`提取错位防护触发：文档中找不到任何关于 ${suite} 的用例数主张（引用句式可能已变更）`);
+  }
+}
+
+// ---------- 抽取器自检（R8）----------
+//
+// 上面所有"跳过/切句"规则，本身也是代码，也会被改坏。这里用合成语料喂给抽取函数，
+// 要求**该抓的必须抓到、该放的必须放过**——否则"这次改对了"没有任何保护，
+// 下次有人为了压噪音再加一个整行跳过，没人知道。
+function selfTest() {
+  const cases = [
+    { line: "SKILL.md（182 行，其中正文 173 行）", want: ["total:182", "body:173"], why: "现状陈述照扫" },
+    { line: "SKILL.md 由 255 行减到 173 行", want: ["total:173"], why: "过渡词之前的旧值不是主张" },
+    { line: "措辞改为强调 SKILL.md 正文 120 行", want: ["body:120"], why: "含「改为」不得整行免检（R8）" },
+    { line: "SKILL.md 曾写 180 行，不再作为主张", want: [], why: "明确转述旧文本仍跳过" },
+    { line: "README.md 正文 120 行", want: [], why: "未点名 SKILL.md 不认作主张" },
+    { line: "（255 行）SKILL.md 历史上是 255 行", want: [], why: "历史标记优先于括号句式" },
+  ];
+  for (const c of cases) {
+    const got = claimsInLine(c.line).map((x) => `${x.kind}:${x.n}`).sort();
+    const want = [...c.want].sort();
+    if (got.join() !== want.join()) {
+      failures.push(
+        `抽取器自检失败（${c.why}）：语料「${c.line}」应抽出 [${want.join(", ") || "无"}]，实际 [${got.join(", ") || "无"}]`
+      );
+    }
+  }
+  if (toNum("六") !== 6 || toNum("五") !== 5 || toNum("sixth") !== 6) {
+    failures.push("抽取器自检失败：中文/英文数字映射被改坏");
+  }
+}
+selfTest();
+
 // ---------- 汇总 ----------
 
-console.log(`check-docs: SKILL.md 实测 总 ${actualTotal} 行 / frontmatter ${fmEnd} 行 / 正文 ${actualBody} 行；设计要点表 ${actualDesignPoints} 条`);
+console.log(
+  `check-docs: SKILL.md 实测 总 ${actualTotal} 行 / frontmatter ${fmEnd} 行 / 正文 ${actualBody} 行；` +
+    `设计要点表 ${actualDesignPoints} 条；维度 ${actualDims} 项；门禁 ${actualGates?.length} 道；` +
+    `用例 校验器 ${actualCases["test-validate-skill.mjs"]} / 机检器 ${actualCases["test-check-report.mjs"]}；` +
+    `突变 ${actualMutations} 条；版本 ${skillVersion}`
+);
 for (const c of checked) console.log("  ✅ " + c);
 if (failures.length) {
   for (const f of failures) console.error("  ✗ " + f);

@@ -85,7 +85,26 @@ else
   echo "✗ description 缺失"; fail=1
 fi
 
-# 4. 规范校验（若本机有校验器）
+# 4. 报告机检器必须随包可用（v2.3 外部评审建议 4）
+#    它承载"未经实测不得定高危"这条约束；装完发现文件缺失，模板里的机检
+#    步骤就会在用户机器上空转——那正是本项目抓过的那类"名实不符"。
+if [ ! -f "${FOUND}/scripts/check-report.mjs" ]; then
+  echo "✗ 报告机检器缺失: ${FOUND}/scripts/check-report.mjs（安装不完整）"; fail=1
+elif ! command -v node >/dev/null 2>&1; then
+  echo "·  未检测到 node，跳过报告机检器的可运行性探测"
+else
+  # 无参数时它应当返回"用法错误(2)"。跑到 2 就说明文件能被解析、主逻辑能执行；
+  # 跑到 1 以外的其他码（例如模块级异常常见的 1）说明装到了坏副本。
+  node "${FOUND}/scripts/check-report.mjs" >/dev/null 2>&1
+  cr_code=$?
+  if [ "$cr_code" -eq 2 ]; then
+    echo "✅ 报告机检器可用（无参数按预期返回用法错误 2）"
+  else
+    echo "✗ 报告机检器异常退出码 $cr_code（预期 2=用法错误）"; fail=1
+  fi
+fi
+
+# 5. 规范校验（若本机有校验器）
 # 注意：v2.0 起校验器位于仓库级 scripts/，不随 skill 安装。
 # 依次尝试：同目录安装副本 -> 环境变量 -> 仓库布局，都找不到就明确说明，不要静默跳过。
 VALIDATOR=""

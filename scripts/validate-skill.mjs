@@ -55,7 +55,33 @@ function parseFrontmatter(text) {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (!line.trim() || line.trimStart().startsWith("#")) continue;
+    // 块标量内部（> 或 |）时，空行与 `#` 开头的行**都是内容**，不是注释。
+    // 这条判断必须在"跳过空行/注释"之前——早先版本先跳过后判缩进，导致
+    // `>` 里的空行不再产生 \n（与第 39 行注释声明的语义相反）、`|` 里的
+    // `# 井号行` 被整行丢弃。文档/描述里用 `#` 起头写注释是很常见的写法。
+    const inBlockScalar = currentBlock && currentBlock !== "metadata" && blockStyle !== "plain";
+    if (inBlockScalar) {
+      if (!line.trim()) {
+        // 空行在两种块标量里都产出一个 \n：折叠块里它是段落分隔，
+        // 字面块里它本身就是那个空行。连续空行按 YAML 语义累积。
+        const prev = fields[currentBlock] || "";
+        if (prev !== "") fields[currentBlock] = `${prev}\n`;
+        continue;
+      }
+      if (/^\s+\S/.test(line)) {
+        const content = line.replace(/^\s+/, "");
+        const prev = fields[currentBlock] || "";
+        if (blockStyle === "folded") {
+          fields[currentBlock] = !prev ? content : prev.endsWith("\n") ? `${prev}${content}` : `${prev} ${content}`;
+        } else {
+          fields[currentBlock] = prev ? `${prev}\n${content}` : content;
+        }
+        continue;
+      }
+      // 未缩进的非空行 → 块结束，落到下面的键解析
+    } else if (!line.trim() || line.trimStart().startsWith("#")) {
+      continue;
+    }
 
     const indented = /^\s+\S/.test(line);
 
@@ -66,21 +92,6 @@ function parseFrontmatter(text) {
         if (mm) {
           fields.metadata ??= {};
           fields.metadata[mm[1].trim()] = stripQuotes(mm[2].trim());
-        }
-        continue;
-      }
-      if (currentBlock && blockStyle !== "plain") {
-        const content = line.replace(/^\s+/, "");
-        if (blockStyle === "folded") {
-          // 折叠块（>）：非空行之间用空格连接
-          fields[currentBlock] = fields[currentBlock]
-            ? `${fields[currentBlock]} ${content}`
-            : content;
-        } else {
-          // 字面块（|）：保留换行
-          fields[currentBlock] = fields[currentBlock]
-            ? `${fields[currentBlock]}\n${content}`
-            : content;
         }
         continue;
       }

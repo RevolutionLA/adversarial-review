@@ -28,18 +28,18 @@ The second one is exactly the failure mode this skill's own first paragraph targ
 >
 > All three mistakes above were mine, all caught by this workflow, each with a re-checkable evidence trail (four reports under `docs/review/`, kept local).
 >
-> **30-second gut feel**: read a [real review sample](skills/adversarial-review/examples/sample-review.md) with full evidence chains.
+> **30-second gut feel**: read a [real review sample](skills/adversarial-review/examples/sample-review.md) with full evidence chains (produced before the current rule, so our linter fails it — the reason is stated inside), or a [compliant sample](skills/adversarial-review/examples/sample-review-v2.2.md) written to today's rules.
 
 ### Proof, not adjectives: the gates can actually go red
 
 These are terminal outputs from a real run just now, not mocks and not "we care about quality". The only test of whether a check is worth anything is whether it can fail.
 
-**1) Re-inject the exact "fixed A, broke B" defect → the commit is rejected**
+**1) Re-inject the exact "fixed A, broke B" defect → the gate exits 1 and the commit dies**
 
 ```bash
-# reproduce: put v2.0.1's semantic swap back, then try to commit
-sed -i 's/blockStyle === "folded"/blockStyle === "literal"/' scripts/validate-skill.mjs
-git add -A && git commit -m "demo: injected regression"; echo "exit=$?"
+# reproduce in a scratch copy (`cp -r` the repo first — don't do this in your worktree)
+sed -i 's/if (blockStyle === "folded")/if (blockStyle === "literal")/' scripts/validate-skill.mjs
+bash .githooks/pre-commit 2>&1 | grep -v "^  ✅"; echo "exit=${PIPESTATUS[0]}"
 ```
 
 ```text
@@ -50,57 +50,60 @@ validate-skill.mjs 回归测试
       折叠块不应含 \n，实际: "line one here\nline two here"
   ✗ 字面块结果应保留换行符
       字面块应含 \n，实际: "line one here line two here"
+  ✗ 折叠块里的空行是段落分隔，应折成一个换行（评审 R5）
+      空行应折成恰好一个 \n（段落分隔），实际: "line one here\n\nline two here"
   ✗ 块标量之后紧跟另一个块标量，状态不应残留
       description 应是折叠块（不含 \n），实际 "folded one\nfolded two"
-结果: 17 通过, 3 失败
+结果: 17 通过, 7 失败
 [pre-commit] ✗ 回归测试未通过 —— 禁止提交（这正是本项目两次事故的根因）
 exit=1
 ```
 
-*(labels are Chinese because that's the tool's output — verbatim, untranslated.)*
+*(Labels are Chinese because that's the tool's output — verbatim, untranslated. In block 1 the passing `✅` lines were filtered out and 3 of the 7 failing lines were elided; the `结果: 17 通过, 7 失败` line is complete. Nothing else was edited.)*
 
 **2) Touch no code, bend one number in the docs → the fifth gate goes red**
 
 ```bash
-# reproduce: change the README's own "171 of body" claim; SKILL.md untouched
-sed -i 's/正文 171 行/正文 180 行/' README.md
-node scripts/check-docs.mjs; echo "exit=$?"
+# reproduce: change the README's own "正文 173 行" claim; SKILL.md untouched
+sed -i 's/正文 173 行/正文 180 行/' README.md
+node scripts/check-docs.mjs 2>&1 | grep -E "^check-docs:|^  ✗"; echo "exit=${PIPESTATUS[0]}"
 ```
 
 ```text
-check-docs: SKILL.md 实测 总 180 行 / frontmatter 9 行 / 正文 171 行；设计要点表 13 条
-  ✅ README.md:374 主张 SKILL.md 总行数 = 180（原文"（180 行"） ✅
-  ✅ README.en.md:380 主张 SKILL.md 总行数 = 180（原文"(180 lines"） ✅
-  ✅ README.en.md:380 主张 SKILL.md 正文行数 = 171（原文"171 of body"） ✅
-  ✅ skills/adversarial-review/references/skill-spec.md:31 主张 SKILL.md 正文行数 = 171（原文"正文 171 行"） ✅
-  ✅ skills/adversarial-review/references/quickstart.md:72 主张「设计要点」表为 13 条 ✅（实测 13）
-  ✅ CHANGELOG.md:19 主张「设计要点」表为 13 条 ✅（实测 13）
-  ✗ README.md:374 主张 SKILL.md 正文行数 = 180（原文"正文 180 行"） —— 实测 正文行数为 171
+check-docs: SKILL.md 实测 总 182 行 / frontmatter 9 行 / 正文 173 行；设计要点表 13 条；维度 19 项；门禁 6 道；用例 校验器 24 / 机检器 15；突变 18 条；版本 2.3.0
+  ✗ README.md:397 主张 SKILL.md 正文行数 = 180（原文"正文 180 行"） —— 实测 正文行数为 173
 check-docs: 1 处文档主张与实况不符
 exit=1
 ```
 
-That second one is the real class of bug `check-docs.mjs` was built for: **a stale number in the docs while the other gates stayed green**. It blocked a commit of mine for exactly that.
+That second one is the real class of bug `check-docs.mjs` was built for: **a stale number in the docs while the other gates stayed green**. It blocked a commit of mine for exactly that. Since v2.3 it reconciles more than line counts: dimension count, number of gates, *which script* the docs claim is the Nth gate, both regression suites' case counts, the mutation count, `SKILL.md`'s version vs the latest CHANGELOG entry, and the tag the installer below is pinned to.
 
-**3) The v2.2 report linter's first victim is our own shipped example**
+**3) The report linter: our historical example goes red, the compliant example goes green**
 
 ```bash
-# lints the Blue Team summary table: grading high without a live repro,
-# a missing "grading basis" column, or an empty location cell → failure
+# lints the Blue Team summary table: a finding claimed as *measured* must carry
+# its own repro command and real output inside its own section
 node skills/adversarial-review/scripts/check-report.mjs \
   skills/adversarial-review/examples/sample-review.md
+node skills/adversarial-review/scripts/check-report.mjs \
+  skills/adversarial-review/examples/sample-review-v2.2.md
 ```
 
 ```text
 check-report: skills/adversarial-review/examples/sample-review.md
-  ✗ 2 条声称"实测"的条目，但报告中只出现 1 处「复现命令」—— 声称实测必须逐条给出可原样重跑的命令与输出（缺：B1、B2）
-check-report: 1 处不符合 v2.2.0「未经实测不得定高危」约束
+  ✗ B1：声称实测，但自己的展开段落里没有「复现命令」 —— 只在总表里写"实测"两个字不构成证据
+  ✗ B2：声称实测，但自己的展开段落里没有「复现命令」 —— 只在总表里写"实测"两个字不构成证据
+check-report: 2 处不符合「未经实测不得定高危」约束（高危须逐条取证）
 exit=1
+check-report: skills/adversarial-review/examples/sample-review-v2.2.md
+check-report: 4 条缺陷（第 29 行的总表），3 条声称实测（其中高危 2 条），逐条取证通过（全文有效「复现命令」2 处）
+exit=0
 ```
 
-That example predates the v2.2 rule, so it **deserves** to fail — the linter doesn't grant grandfather status to the author's own docs. Its regression suite has 11 cases, 2 of which assert *passing*, so the linter can't cheat by failing everything.
+That first example predates the rule, so it **deserves** to fail — the linter doesn't grant grandfather status to the author's own docs. Its regression suite (`scripts/test-check-report.mjs`, 15 cases, 3 of which assert *passing*) stops it from cheating by failing everything.
+**v2.3 changed how evidence is collected: per finding, in place.** Until then the linter just counted how many times the four characters 「复现命令」 appeared anywhere in the report — an external reviewer proved that **typing those four characters once lets through any number of fabricated high-severity findings**. Counting-based checks are gameable by construction. Now each high finding must show its own command and output; sharing one, an empty heading, or a bare label no longer counts.
 
-*(The `README.md:374` line numbers above move whenever the docs change. Line-number rot is itself one of the recurring findings in our own checklist — dimension 17, documentation consistency — so we flag it rather than pretending it's a constant. This block was regenerated by re-running the repro after the current edit, not hand-patched.)*
+*(The `README.md:397` line numbers above move whenever the docs change. Line-number rot is itself one of the recurring findings in our own checklist — documentation consistency, dimension 17 — so we flag it rather than pretending it's a constant. All three blocks were regenerated by re-running the repros after this edit, not hand-patched.)*
 
 ---
 
@@ -197,19 +200,34 @@ Copy-Item -Recurse -Force ".\adversarial-review\skills\adversarial-review" "$env
 
 ### Option 3 — one-line installer
 
+The URLs are pinned to a **reviewed release tag** (`v2.3.0`), not to `main` — a one-liner pointed at `main` pipes whatever unreviewed commit landed an hour ago straight into your skills directory.
+
+**Read it, then run it** (two steps, ~30 seconds):
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/RevolutionLA/adversarial-review/main/skills/adversarial-review/scripts/install.sh | bash
+# Step 1: read the script first — where it writes, what it does to an existing install
+curl -fsSL https://raw.githubusercontent.com/RevolutionLA/adversarial-review/v2.3.0/skills/adversarial-review/scripts/install.sh | less
+```
+
+```bash
+# Step 2: run it once you agree with what you read
+curl -fsSL https://raw.githubusercontent.com/RevolutionLA/adversarial-review/v2.3.0/skills/adversarial-review/scripts/install.sh | bash
 ```
 
 <details>
 <summary>Windows (PowerShell)</summary>
 
 ```powershell
-irm https://raw.githubusercontent.com/RevolutionLA/adversarial-review/main/skills/adversarial-review/scripts/install.ps1 | iex
+# Step 1: read
+irm https://raw.githubusercontent.com/RevolutionLA/adversarial-review/v2.3.0/skills/adversarial-review/scripts/install.ps1 | more
+# Step 2: run
+irm https://raw.githubusercontent.com/RevolutionLA/adversarial-review/v2.3.0/skills/adversarial-review/scripts/install.ps1 | iex
 ```
 </details>
 
-> If a previous install exists, the script **moves it into a `skill-backups/` directory outside the skills dir** before overwriting — your local edits are preserved, and the backup can never linger as a ghost skill hijacking triggers.
+> That tag isn't typed by hand: `check-docs.mjs` diffs the tag in these two URLs against the latest CHANGELOG version, so updating one and forgetting the other blocks the commit.
+
+> If a previous install exists, the script **moves it into a `skill-backups/` directory outside the skills dir** before overwriting — your local edits are preserved, and the backup can never linger as a ghost skill hijacking triggers. Only the 3 most recent backups are kept.
 
 ### Verify the install
 
@@ -281,7 +299,7 @@ docs/review/
 └─ ADJUDICATION-<version>.md        # Final rulings + shared-premise review + merged action list
 ```
 
-A worked example is in [`examples/sample-review.md`](skills/adversarial-review/examples/sample-review.md).
+Two worked examples: [`examples/sample-review.md`](skills/adversarial-review/examples/sample-review.md) (real output, pre-rule) and [`examples/sample-review-v2.2.md`](skills/adversarial-review/examples/sample-review-v2.2.md) (current rules, passes the linter).
 
 > **Note**: review records are **not committed by default** (see `/docs/review/` in `.gitignore`). They contain details of unfixed issues and internal implementation context, so keeping them local is the safer default. If you want to publish them as a quality-process showcase, remove that line and commit normally.
 
@@ -322,14 +340,15 @@ Three rounds of self-review during development. What they actually caught:
 | **v2.0 Third Party** | A "fixed" claim in the remediation doc was **false** (disproved by blob hash); a CI step **didn't do what its name said**; 5 mutations escaped the new tests |
 | **v2.0.2 Adjudicator** | **The fix introduced a new bug** — `>` and `|` parsing semantics were swapped, and that commit **shipped with its own tests red**; the install-verify script **reported a fake "passed" to users** |
 | **v2.1.0, two full rounds** | Blue Team: 11 findings (false "landed in all templates" claim, stale installed copy, backups hijacking trigger routing…) → Third Party: 14 findings proving **round-1 remediation only partially landed**, `verify-install` printing "🎉 passed" against a stale copy, and **all four gates blind to this entire defect class** → Adjudicator: re-graded 2, rejected 1 suggestion, and implemented the fifth gate on the spot |
+| **v2.2.0, external review (15 findings)** | The reviewer produced a report **written to our own rules that our linter passed**: v2.2's checker only *counted* how many times the label 「复现命令」 appeared in the whole file, so writing those four characters once lets through any number of fabricated high-severity findings. **Counting-based checks are gameable by construction.** The other 14 included a missing sixth gate in CI, folded-block blank-line semantics contradicting the code's own comment, and `curl \| bash` pinned to mutable `main` |
 
 ### Quality infrastructure that came out of it
 
 - **`.githooks/pre-commit` gate (six checks)** — regression tests + mutation tests + spec validation + link check + doc-claim guard + report-linter tests; any failure blocks the commit. Verified to actually block by re-injecting the bug. (Enable: `git config core.hooksPath .githooks`)
-- **Doc-claim guard** (`scripts/check-docs.mjs`, new in v2.1) — extracts numeric claims ("SKILL.md has N lines", "the design-points table has M rows") from CHANGELOG/README and diffs them against reality. **Its first run caught the author's own stale line counts** (175→177 unsynced). Verbatim tool output inside fenced code blocks is *not* a claim (otherwise this README couldn't demo its own gate going red); prose is still scanned, and a floor guard requires at least two line-count claim pairs to be extracted, so losing coverage errors out instead of passing silently.
-- **Mutation testing** (`scripts/test-mutations.mjs`) — injects 11 defects into the code and checks whether the regression tests **can catch them**. Currently **10 caught / 0 escaped / 1 equivalent mutant**.
-- **Report linter** (`skills/adversarial-review/scripts/check-report.mjs`, new in v2.2, **shipped with the skill**) — machine-checks the Blue Team summary table: a 🔴/🟠 may only be graded high on a *measured* basis, every "measured" claim must carry its own repro command, and no location cell may be empty. **Why it exists**: "you must verify" is prose — a model that wants its finding to look important will simply claim it ran the check. Binding grade to evidence and having the Third Party re-run it is what turns fabrication into a *detectable* defect. Its regression suite (11 cases = 2 green + 9 red, each asserting the error text, not just the exit code) is the sixth gate.
-  - **Why it's needed**: green tests ≠ effective tests. This project's regression suite once let 5 mutations escape — including one where deleting the length-limit check caused a **1235-character illegal description to be reported as passing**.
+- **Doc-claim guard** (`scripts/check-docs.mjs`, new in v2.1, extended in v2.3) — extracts numeric claims ("SKILL.md has N lines", "the design-points table has M rows", "the gate has N checks", "the suite has N cases", "the installer is pinned to tag X") from CHANGELOG/README and diffs them against reality. **Its first run caught the author's own stale line counts** (175→177 unsynced). Verbatim tool output inside fenced code blocks is *not* a claim (otherwise this README couldn't demo its own gate going red); prose is still scanned, and a floor guard requires at least two line-count claim pairs to be extracted, so losing coverage errors out instead of passing silently. Since v2.3 it also runs an **extractor self-test** on synthetic fixture lines — skip rules are code too, and they can be weakened to silence a check. It guards `scripts/test-validate-skill.mjs` (24 cases) and `scripts/test-check-report.mjs` (15 cases) as well.
+- **Mutation testing** (`scripts/test-mutations.mjs`) — injects 18 defects (12 into the validator, 6 into the report linter) and checks whether the regression tests **can catch them**. Latest real run: **17 caught / 0 escaped / 1 equivalent mutant / 0 invalid**; mutations are applied to temp copies only, never the working tree.
+  - **Why it's needed**: green tests ≠ effective tests. This project's regression suite once let 5 mutations escape — including one where deleting the length-limit check caused a **1235-character illegal description to be reported as passing**. Since v2.3 the report linter is itself a mutation target: a linter that only ever passes compliant reports is as dangerous as no linter.
+- **Report linter** (`skills/adversarial-review/scripts/check-report.mjs`, new in v2.2, rebuilt in v2.3, **shipped with the skill**) — machine-checks the Blue Team summary table: a 🔴/🟠 may only be graded high on a *measured* basis, each "measured" high finding must carry its **own** repro command and real output next to it, and no location cell may be empty. **Why it exists**: "you must verify" is prose — a model that wants its finding to look important will simply claim it ran the check. Binding grade to evidence and having the Third Party re-run it is what turns fabrication into a *detectable* defect. Its regression suite (`scripts/test-check-report.mjs`, 15 cases = 3 green + 11 red + 1 usage error, each asserting the error text, not just the exit code) is the sixth gate.
 - **Agent Skills spec validator** (`scripts/validate-skill.mjs`) — zero-dependency, usable as a general-purpose tool for your own skills.
 
 ---
@@ -377,7 +396,7 @@ Don't say "verified by an independent third party". Say "**adversarially reviewe
 
 ## Repo layout
 
-The main file `SKILL.md` is (180 lines, 171 of body) after frontmatter — those two numbers are not hand-typed: `check-docs.mjs` measures them against the file and a stale number blocks the commit.
+The main file `SKILL.md` is (182 lines, 173 of body) after frontmatter — those two numbers are not hand-typed: `check-docs.mjs` measures them against the file and a stale number blocks the commit.
 
 ```
 adversarial-review/
@@ -386,21 +405,23 @@ adversarial-review/
 │   └── adversarial-review/          ← the skill itself (skills.sh layout)
 │       ├── SKILL.md                 ← main file
 │       ├── references/
-│       │   ├── review-dimensions.md ← 19-dimension checklist
+│       │   ├── review-dimensions.md ← dimension checklist
 │       │   ├── prompt-templates.md  ← role prompt templates
 │       │   ├── quickstart.md
 │       │   └── skill-spec.md        ← SKILL.md spec cheat sheet
-│       ├── examples/sample-review.md
+│       ├── examples/                ← one compliant sample + one pre-rule historical sample
 │       └── scripts/                 ← install, verify & report-lint scripts (shipped)
 ├── scripts/                         ← repo-level tooling (not installed with the skill)
 │   ├── validate-skill.mjs           ← Agent Skills spec validator
-│   ├── test-validate-skill.mjs      ← validator regression tests (20 cases)
-│   ├── test-check-report.mjs        ← report linter regression tests (11 cases)
-│   ├── test-mutations.mjs           ← mutation testing
+│   ├── test-validate-skill.mjs      ← validator regression tests
+│   ├── test-check-report.mjs        ← report linter regression tests
+│   ├── test-mutations.mjs           ← mutation testing (two targets)
 │   ├── check-docs.mjs               ← doc numeric-claim guard
 │   └── check-links.mjs              ← markdown link checker
 └── .githooks/pre-commit             ← commit gate
 ```
+
+> Case counts are deliberately **absent from the tree**: numbers inside a fenced block are invisible to the doc-claim guard, so they would become unguarded orphan claims. They appear only twice, in prose that names the script file — which is what lets `check-docs.mjs` attribute them.
 
 ---
 

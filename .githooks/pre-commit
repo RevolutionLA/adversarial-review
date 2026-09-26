@@ -20,37 +20,42 @@ echo "[pre-commit] 运行门禁检查..."
 
 command -v node >/dev/null 2>&1 || fail "未找到 node，无法运行检查"
 
+# 日志写在本次提交专属的临时目录里。写死 /tmp/precommit-*.log 时，
+# 两个并发提交会互相覆盖对方的日志，失败时看到的是别人的输出（评审 R14）。
+LOGD="$(mktemp -d "${TMPDIR:-/tmp}/precommit.XXXXXX")"
+trap 'rm -rf "$LOGD"' EXIT
+
 # 1. 回归测试必须全绿
-if ! node scripts/test-validate-skill.mjs >/tmp/precommit-test.log 2>&1; then
-  cat /tmp/precommit-test.log >&2
+if ! node scripts/test-validate-skill.mjs >"$LOGD/test.log" 2>&1; then
+  cat "$LOGD/test.log" >&2
   fail "回归测试未通过 —— 禁止提交（这正是本项目两次事故的根因）"
 fi
 echo "[pre-commit] ✅ 回归测试通过"
 
 # 2. 突变测试必须无逃逸（验证测试真的有效，而非装饰）
-if ! node scripts/test-mutations.mjs >/tmp/precommit-mut.log 2>&1; then
-  cat /tmp/precommit-mut.log >&2
+if ! node scripts/test-mutations.mjs >"$LOGD/mut.log" 2>&1; then
+  cat "$LOGD/mut.log" >&2
   fail "突变测试存在逃逸 —— 说明回归测试无法抓住缺陷，禁止提交"
 fi
 echo "[pre-commit] ✅ 突变测试无逃逸"
 
 # 3. 规范校验
-if ! node scripts/validate-skill.mjs skills/adversarial-review >/tmp/precommit-spec.log 2>&1; then
-  cat /tmp/precommit-spec.log >&2
+if ! node scripts/validate-skill.mjs skills/adversarial-review >"$LOGD/spec.log" 2>&1; then
+  cat "$LOGD/spec.log" >&2
   fail "SKILL.md 不符合 Agent Skills 规范"
 fi
 echo "[pre-commit] ✅ 规范校验通过"
 
 # 4. 本地链接可达
-if ! node scripts/check-links.mjs >/tmp/precommit-links.log 2>&1; then
-  cat /tmp/precommit-links.log >&2
+if ! node scripts/check-links.mjs >"$LOGD/links.log" 2>&1; then
+  cat "$LOGD/links.log" >&2
   fail "存在断链"
 fi
 echo "[pre-commit] ✅ 链接检查通过"
 
 # 4b. 文档数字主张一致（v2.1 T7：行数/条数主张失真必须让门禁变红）
-if ! node scripts/check-docs.mjs >/tmp/precommit-docs.log 2>&1; then
-  cat /tmp/precommit-docs.log >&2
+if ! node scripts/check-docs.mjs >"$LOGD/docs.log" 2>&1; then
+  cat "$LOGD/docs.log" >&2
   fail "文档行数/条数主张与实况不符 —— 禁止提交"
 fi
 echo "[pre-commit] ✅ 文档主张一致"
@@ -58,8 +63,8 @@ echo "[pre-commit] ✅ 文档主张一致"
 # 4c. 报告机检器的回归测试（v2.2：未实测不得定高危这条约束的兜底）
 #     注意测的是 scripts/check-report.mjs **自己**判得对不对——
 #     一个只会放过合规报告的机检器，和没有机检器一样危险。
-if ! node scripts/test-check-report.mjs >/tmp/precommit-report.log 2>&1; then
-  cat /tmp/precommit-report.log >&2
+if ! node scripts/test-check-report.mjs >"$LOGD/report.log" 2>&1; then
+  cat "$LOGD/report.log" >&2
   fail "报告机检器回归测试未通过 —— 禁止提交"
 fi
 echo "[pre-commit] ✅ 报告机检器测试通过"
@@ -69,5 +74,29 @@ for f in skills/adversarial-review/scripts/*.sh; do
   bash -n "$f" || fail "shell 语法错误: $f"
 done
 echo "[pre-commit] ✅ shell 语法通过"
+
+# 5b. PowerShell 语法（CI 有这一步，本地此前没有 —— 本地/CI 门禁不对齐，评审 R14）。
+#     没有 pwsh/powershell 时**如实说明跳过**，不许静默"通过"。
+if command -v pwsh >/dev/null 2>&1; then
+  PS=pwsh
+elif command -v powershell >/dev/null 2>&1; then
+  PS=powershell
+else
+  PS=""
+fi
+if [ -n "$PS" ]; then
+  "$PS" -NoProfile -Command '
+    $failed = $false
+    Get-ChildItem -Recurse -Filter *.ps1 | ForEach-Object {
+      $errs = $null
+      [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$errs) | Out-Null
+      if ($errs.Count -gt 0) { Write-Host "语法错误 $($_.FullName): $($errs.Count) 处"; $failed = $true }
+    }
+    if ($failed) { exit 1 }
+  ' || fail "PowerShell 语法错误"
+  echo "[pre-commit] ✅ PowerShell 语法通过"
+else
+  echo "[pre-commit] ⚠ 未找到 pwsh/powershell，跳过 .ps1 语法检查（CI 会跑这一步）"
+fi
 
 echo "[pre-commit] 全部门禁通过，允许提交。"

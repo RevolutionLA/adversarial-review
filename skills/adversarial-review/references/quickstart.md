@@ -85,10 +85,12 @@ node scripts/check-docs.mjs             # 文档中的行数/条数主张与实�
 node scripts/test-mutations.mjs         # 突变测试：证明这些检查真能失败
 ```
 
-跑完评审后，用**随 skill 安装**的报告机检器扫一遍蓝军总表（未实测却定高危、缺「定级依据」列、位置列为空都会失败）：
+跑完评审后，用**随 skill 安装**的报告机检器把蓝军和第三方两份总表各扫一遍（未实测却定高危、缺「定级依据」列、位置列为空、**声称实测却在自己的展开段落里拿不出命令**，都会失败）：
 
 ```bash
-node ~/.claude/skills/adversarial-review/scripts/check-report.mjs docs/review/BLUE-TEAM-REVIEW-<version>.md
+S=~/.claude/skills/adversarial-review/scripts/check-report.mjs
+node $S docs/review/BLUE-TEAM-REVIEW-<version>.md
+node $S docs/review/THIRD-PARTY-REVIEW-<version>.md
 ```
 
-完整产出样例见 [`../examples/sample-review.md`](../examples/sample-review.md)。
+完整产出样例见 [`../examples/sample-review-v2.2.md`](../examples/sample-review-v2.2.md)（能通过机检器）；[`../examples/sample-review.md`](../examples/sample-review.md) 是 v2.2 之前的历史样例，保留是为了演示行号腐烂，机检器对它判红是预期行为。

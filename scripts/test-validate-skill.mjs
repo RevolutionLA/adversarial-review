@@ -43,6 +43,17 @@ function run(dir) {
     const out = execFileSync(process.execPath, [VALIDATOR, dir], { encoding: "utf8" });
     return { code: 0, out, crashed: false };
   } catch (e) {
+    // "子进程根本没起来"（EBUSY / EACCES / node 不在 PATH）与"校验器崩溃"是两件事：
+    // 前者是测试环境的问题，报成崩溃会把排查方向带到校验器代码里去。
+    // 外部评审 R10 命中过这条——13 个用例全报"校验器崩溃"，根因是 spawnSync EBUSY。
+    if (e.status === null || e.status === undefined) {
+      return {
+        code: -1,
+        out: `无法启动校验器子进程（errno=${e.code || "?"}）：${e.message}`,
+        crashed: false,
+        spawnFailed: true,
+      };
+    }
     const out = `${e.stdout ?? ""}${e.stderr ?? ""}`;
     // 崩溃检测：未捕获异常会带 stack trace 关键词，且不会打印结构化结果行。
     // 把"崩溃"当成"正确报错"是测试框架的真实缺陷（会掩盖注入的严重 bug），
@@ -53,7 +64,7 @@ function run(dir) {
 }
 
 function check(name, dir, expect) {
-  const { code, out, crashed } = run(dir);
+  const { code, out, crashed, spawnFailed } = run(dir);
   // 崩溃不应被当作"正确报错"
   const ok =
     !crashed &&
@@ -65,7 +76,10 @@ function check(name, dir, expect) {
   } else {
     fail++;
     console.log(`  ✗ ${name}`);
-    if (crashed) {
+    if (spawnFailed) {
+      console.log(`      ${out}`);
+      console.log(`      —— 这是测试环境无法派生子进程，不是校验器的判定错误`);
+    } else if (crashed) {
       console.log(`      校验器崩溃（未捕获异常），而非结构化报错：`);
       console.log(`      ${out.trim().split("\n").find((l) => /Error|error/.test(l)) ?? out.slice(0, 120)}`);
     } else {
@@ -184,6 +198,46 @@ checkSemantics("字面块结果应保留换行符", () => {
   }
   if (fields.description !== "line one here\nline two here") {
     return `字面块拼接结果错误: ${JSON.stringify(fields.description)}`;
+  }
+  return null;
+});
+
+checkSemantics("折叠块里的空行是段落分隔，应折成一个换行（评审 R5）", () => {
+  const { fields } = parseFrontmatter(
+    `---\nname: a\ndescription: >\n  line one here\n\n  line two here\n---\n`
+  );
+  if (fields.description !== "line one here\nline two here") {
+    return `空行应折成恰好一个 \\n（段落分隔），实际: ${JSON.stringify(fields.description)}`;
+  }
+  return null;
+});
+
+checkSemantics("折叠块里的连续空行按 YAML 语义累积（段落分隔不被吞）", () => {
+  const { fields } = parseFrontmatter(
+    `---\nname: a\ndescription: >\n  line one here\n\n\n  line two here\n---\n`
+  );
+  if (fields.description !== "line one here\n\nline two here") {
+    return `两个空行应累积成两个 \\n，实际: ${JSON.stringify(fields.description)}`;
+  }
+  return null;
+});
+
+checkSemantics("字面块里的 # 开头行是内容，不得当注释丢弃（评审 R5）", () => {
+  const { fields } = parseFrontmatter(
+    `---\nname: a\ndescription: |\n  heading\n  # not a comment\n  tail\n---\n`
+  );
+  if (fields.description !== "heading\n# not a comment\ntail") {
+    return `# 行被丢弃或错位，实际: ${JSON.stringify(fields.description)}`;
+  }
+  return null;
+});
+
+checkSemantics("字面块里的空行必须原样保留（评审 R5）", () => {
+  const { fields } = parseFrontmatter(
+    `---\nname: a\ndescription: |\n  heading\n\n  tail\n---\n`
+  );
+  if (fields.description !== "heading\n\ntail") {
+    return `字面块应保留空行，实际: ${JSON.stringify(fields.description)}`;
   }
   return null;
 });

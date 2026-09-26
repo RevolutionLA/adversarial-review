@@ -67,6 +67,17 @@ try {
         New-Item -ItemType Directory -Force -Path $BackupRoot | Out-Null
         Move-Item $Dest $backup
         Write-Info "new version: $newVer"
+
+        # 备份只保留最近 3 份（评审 R13）：只按本脚本自己的命名 (.bak.<时间戳>) 排序清理
+        $KeepBackups = 3
+        $stale = @(Get-ChildItem -Path $BackupRoot -Directory -ErrorAction SilentlyContinue |
+                   Where-Object { $_.Name -match ("^" + [regex]::Escape($SkillName) + "\.bak\.") } |
+                   Sort-Object Name -Descending |
+                   Select-Object -Skip $KeepBackups)
+        foreach ($s in $stale) {
+            Remove-Item -Recurse -Force $s.FullName
+            Write-Info ("pruned old backup (kept newest $KeepBackups): " + $s.Name)
+        }
     }
 
     New-Item -ItemType Directory -Force -Path $Dest | Out-Null

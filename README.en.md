@@ -8,6 +8,8 @@
 [![Agent Skill](https://img.shields.io/badge/Agent%20Skill-SKILL.md-blue.svg)](skills/adversarial-review/SKILL.md)
 [![Works with](https://img.shields.io/badge/works%20with-Claude%20Code%20%7C%20DeepSeek%20Harness%20%7C%20Cursor%20%7C%20Codex-green.svg)](#compatibility)
 
+**Install**: `npx skills add RevolutionLA/adversarial-review` (see [Install](#install))
+
 ---
 
 ## The most convincing thing about this skill
@@ -67,16 +69,16 @@ node scripts/check-docs.mjs; echo "exit=$?"
 
 ```text
 check-docs: SKILL.md 实测 总 177 行 / frontmatter 9 行 / 正文 168 行；设计要点表 12 条
-  ✅ README.md:310 主张 SKILL.md 总行数 = 177（原文"（177 行"） ✅
+  ✅ README.md:312 主张 SKILL.md 总行数 = 177（原文"（177 行"） ✅
   ✅ skills/adversarial-review/references/skill-spec.md:31 主张 SKILL.md 正文行数 = 168（原文"正文 168 行"） ✅
-  ✗ README.md:310 主张 SKILL.md 正文行数 = 177（原文"正文 177 行"） —— 实测 正文行数为 168
+  ✗ README.md:312 主张 SKILL.md 正文行数 = 177（原文"正文 177 行"） —— 实测 正文行数为 168
 check-docs: 1 处文档主张与实况不符
 exit=1
 ```
 
 That second one is the real class of bug `check-docs.mjs` was built for: **a stale number in the docs while the other four gates stayed green**. It blocked a commit of mine for exactly that.
 
-*(The `README.md:310` line numbers above move whenever the docs change. Line-number rot is itself one of the recurring findings in our own checklist — dimension 17, documentation consistency — so we flag it rather than pretending it's a constant.)*
+*(The `README.md:312` line numbers above move whenever the docs change. Line-number rot is itself one of the recurring findings in our own checklist — dimension 17, documentation consistency — so we flag it rather than pretending it's a constant.)*
 
 ---
 

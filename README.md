@@ -8,6 +8,8 @@
 [![Agent Skill](https://img.shields.io/badge/Agent%20Skill-SKILL.md-blue.svg)](skills/adversarial-review/SKILL.md)
 [![Works with](https://img.shields.io/badge/works%20with-Claude%20Code%20%7C%20DeepSeek%20Harness%20%7C%20Cursor%20%7C%20Codex-green.svg)](#兼容性)
 
+**安装**：`npx skills add RevolutionLA/adversarial-review`（详见 [安装](#安装)）
+
 ---
 
 ## 先说最有说服力的一件事
@@ -65,16 +67,16 @@ node scripts/check-docs.mjs; echo "exit=$?"
 
 ```text
 check-docs: SKILL.md 实测 总 177 行 / frontmatter 9 行 / 正文 168 行；设计要点表 12 条
-  ✅ README.md:310 主张 SKILL.md 总行数 = 177（原文"（177 行"） ✅
+  ✅ README.md:312 主张 SKILL.md 总行数 = 177（原文"（177 行"） ✅
   ✅ skills/adversarial-review/references/skill-spec.md:31 主张 SKILL.md 正文行数 = 168（原文"正文 168 行"） ✅
-  ✗ README.md:310 主张 SKILL.md 正文行数 = 177（原文"正文 177 行"） —— 实测 正文行数为 168
+  ✗ README.md:312 主张 SKILL.md 正文行数 = 177（原文"正文 177 行"） —— 实测 正文行数为 168
 check-docs: 1 处文档主张与实况不符
 exit=1
 ```
 
 第二段就是 `check-docs.mjs` 上线当晚抓到的那类问题（**作者写的数字过期了，其余四道门禁全绿**）。它当时是真的让我提交失败了一次。
 
-> 上面输出的行号（`README.md:310`）会随文档增删而变——**行号引用会腐烂**这件事本身就是本 skill 的第 17 维度（文档一致性）反复抓到的缺陷，所以我们把它显式标出来，而不是假装它是常量。
+> 上面输出的行号（`README.md:312`）会随文档增删而变——**行号引用会腐烂**这件事本身就是本 skill 的第 17 维度（文档一致性）反复抓到的缺陷，所以我们把它显式标出来，而不是假装它是常量。
 
 ---
 

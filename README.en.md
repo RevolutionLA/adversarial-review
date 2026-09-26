@@ -93,8 +93,8 @@ node skills/adversarial-review/scripts/check-report.mjs \
 
 ```text
 check-report: skills/adversarial-review/examples/sample-review.md
-  ✗ 2 条声称「实测」，但全文只出现 1 处「复现命令」—— 声称实测必须逐条给出可原样重跑的命令与实际输出（如 B1、B2）
-check-report: 1 处不符合 v2.2 定级约束
+  ✗ 2 条声称"实测"的条目，但报告中只出现 1 处「复现命令」—— 声称实测必须逐条给出可原样重跑的命令与输出（缺：B1、B2）
+check-report: 1 处不符合 v2.2.0「未经实测不得定高危」约束
 exit=1
 ```
 

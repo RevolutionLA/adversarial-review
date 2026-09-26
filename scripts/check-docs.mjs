@@ -174,7 +174,7 @@ function designPointCount() {
 const actualDesignPoints = designPointCount();
 
 const dpHits = { quickstart: 0, changelog: 0 };
-function countClaims(file, text, re, describe) {
+function countClaims(file, text, re, describe, lineOffset = 0) {
   const lines = text.split("\n");
   lines.forEach((line, idx) => {
     const m = line.match(re);
@@ -184,17 +184,28 @@ function countClaims(file, text, re, describe) {
     if (actualDesignPoints === null) return;
     if (n !== actualDesignPoints) {
       failures.push(
-        `${rel(file)}:${idx + 1} 主张「设计要点」表为 ${n} 条 —— 实测为 ${actualDesignPoints} 条（${describe}）`
+        `${rel(file)}:${idx + 1 + lineOffset} 主张「设计要点」表为 ${n} 条 —— 实测为 ${actualDesignPoints} 条（${describe}）`
       );
     } else {
-      checked.push(`${rel(file)}:${idx + 1} 主张「设计要点」表为 ${n} 条 ✅（实测 ${actualDesignPoints}）`);
+      checked.push(`${rel(file)}:${idx + 1 + lineOffset} 主张「设计要点」表为 ${n} 条 ✅（实测 ${actualDesignPoints}）`);
     }
   });
 }
 
 countClaims(QUICKSTART_MD, read(QUICKSTART_MD), /(\d{1,3})\s*条约束/, "quickstart 引用");
-// CHANGELOG 只认"表扩为 N 条"这种对**现状**的断言句式；历史转述（如「11 条约束表」）不参与对账。
-countClaims(CHANGELOG_MD, read(CHANGELOG_MD), /表扩为\s*(\d{1,3})\s*条/, "CHANGELOG 主张");
+// CHANGELOG 只认**最新条目**里"表扩为 N 条"这种对现状的断言；历史条目描述的是当时的现状，
+// 表一旦扩条，旧条目必然"不符"——把它们拉进对账会让检查变成噪音，逼作者改写历史。
+// （v2.2.0 扩表到 13 条时，本检查真的把 2.1.0 的"扩为 12 条"判红了，据此修正作用域。）
+function latestChangelogEntry(text) {
+  const lines = text.split("\n");
+  const start = lines.findIndex((l) => /^## \[/.test(l));
+  if (start === -1) return { text: "", offset: 0 };
+  const next = lines.findIndex((l, i) => i > start && /^## \[/.test(l));
+  const stop = next === -1 ? lines.length : next;
+  return { text: lines.slice(start, stop).join("\n"), offset: start };
+}
+const clLatest = latestChangelogEntry(read(CHANGELOG_MD));
+countClaims(CHANGELOG_MD, clLatest.text, /表扩为\s*(\d{1,3})\s*条/, "CHANGELOG 主张", clLatest.offset);
 // 提取错位防护：quickstart 必须至少贡献一条条数主张，否则说明引用句式改了而检查没跟上。
 if (dpHits.quickstart < 1) {
   failures.push(`提取错位防护触发：quickstart.md 未提取到任何"N 条约束"主张（引用句式可能已变更）`);

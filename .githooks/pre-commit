@@ -55,6 +55,15 @@ if ! node scripts/check-docs.mjs >/tmp/precommit-docs.log 2>&1; then
 fi
 echo "[pre-commit] ✅ 文档主张一致"
 
+# 4c. 报告机检器的回归测试（v2.2：未实测不得定高危这条约束的兜底）
+#     注意测的是 scripts/check-report.mjs **自己**判得对不对——
+#     一个只会放过合规报告的机检器，和没有机检器一样危险。
+if ! node scripts/test-check-report.mjs >/tmp/precommit-report.log 2>&1; then
+  cat /tmp/precommit-report.log >&2
+  fail "报告机检器回归测试未通过 —— 禁止提交"
+fi
+echo "[pre-commit] ✅ 报告机检器测试通过"
+
 # 5. shell 语法
 for f in skills/adversarial-review/scripts/*.sh; do
   bash -n "$f" || fail "shell 语法错误: $f"

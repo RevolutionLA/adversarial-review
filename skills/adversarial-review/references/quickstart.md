@@ -69,7 +69,7 @@ cat docs/review/ADJUDICATION-*.md           # 中立裁定：最终该修什么
 **改之前先读两个地方**：
 
 1. **[`prompt-templates.md`](prompt-templates.md)** —— 三个角色的完整提示词模板都在这里。
-2. **[`prompt-templates.md`](prompt-templates.md) 末尾的「设计要点」表** —— 列出改模板时**不能丢**的 12 条约束（尤其是"逐维度表态""第三方稽核蓝军覆盖度""裁定方审查共同前提""分级展开+按编号引用"这四条）。
+2. **[`prompt-templates.md`](prompt-templates.md) 末尾的「设计要点」表** —— 列出改模板时**不能丢**的 13 条约束（尤其是"逐维度表态""第三方稽核蓝军覆盖度""裁定方审查共同前提""分级展开+按编号引用""定级与实测绑定"这五条）。
 
 **要扩展审查范围**（比如想加上"性能"之外的质量属性），改 [`review-dimensions.md`](review-dimensions.md)，不要去改模板——**维度是数据，模板是机制**。
 
@@ -79,9 +79,16 @@ cat docs/review/ADJUDICATION-*.md           # 中立裁定：最终该修什么
 # 从仓库根目录运行
 node scripts/validate-skill.mjs skills/adversarial-review
 node scripts/test-validate-skill.mjs    # 校验器自身的回归测试
+node scripts/test-check-report.mjs      # 报告机检器的回归测试
 node scripts/check-links.mjs            # 检查文档里的本地链接
 node scripts/check-docs.mjs             # 文档中的行数/条数主张与实况一致
 node scripts/test-mutations.mjs         # 突变测试：证明这些检查真能失败
+```
+
+跑完评审后，用**随 skill 安装**的报告机检器扫一遍蓝军总表（未实测却定高危、缺「定级依据」列、位置列为空都会失败）：
+
+```bash
+node ~/.claude/skills/adversarial-review/scripts/check-report.mjs docs/review/BLUE-TEAM-REVIEW-<version>.md
 ```
 
 完整产出样例见 [`../examples/sample-review.md`](../examples/sample-review.md)。

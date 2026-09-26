@@ -8,7 +8,12 @@ REPO_URL="https://github.com/RevolutionLA/adversarial-review.git"
 SKILL_SUBPATH="skills/${SKILL_NAME}"
 DEFAULT_DIR="${HOME}/.claude/skills"
 TARGET_DIR="${1:-$DEFAULT_DIR}"
+TARGET_DIR="${TARGET_DIR%/}"   # 去尾部斜杠，保证父目录推导稳定
 DEST="${TARGET_DIR}/${SKILL_NAME}"
+# 备份必须落在 skills 目录之外：留在 skills 内的 `.bak.*` 目录带着同名
+# frontmatter（name: adversarial-review），会与主 skill 抢触发路由，
+# 命中即回退旧流程（v2.1 三方评审 B4/T6 实证的缺陷）。
+BACKUP_ROOT="$(dirname "${TARGET_DIR}")/skill-backups"
 
 info()  { printf '\033[36m[info]\033[0m %s\n' "$1"; }
 ok()    { printf '\033[32m[ ok ]\033[0m %s\n' "$1"; }
@@ -43,9 +48,10 @@ NEW_VER="$(sed -n 's/^  version:[[:space:]]*//p' "${SRC}/SKILL.md" | head -n 1 |
 if [ -d "${DEST}" ]; then
   OLD_VER=""
   [ -f "${DEST}/SKILL.md" ] && OLD_VER="$(sed -n 's/^  version:[[:space:]]*//p' "${DEST}/SKILL.md" | head -n 1 | tr -d '\r"')"
-  BACKUP="${DEST}.bak.$(date +%Y%m%d%H%M%S)"
+  BACKUP="${BACKUP_ROOT}/${SKILL_NAME}.bak.$(date +%Y%m%d%H%M%S)"
   warn "existing install found (version: ${OLD_VER:-unknown})"
-  info "backing up to ${BACKUP} (not deleting — your local edits are preserved there)"
+  info "backing up to ${BACKUP} (outside the skills dir, not deleting — your local edits are preserved there)"
+  mkdir -p "${BACKUP_ROOT}"
   mv "${DEST}" "${BACKUP}"
   info "new version: ${NEW_VER:-unknown}"
 fi

@@ -5,6 +5,7 @@ set -uo pipefail
 SKILL_NAME="adversarial-review"
 CANDIDATES=(
   "${HOME}/.claude/skills/${SKILL_NAME}"
+  "${HOME}/.agents/skills/${SKILL_NAME}"
   "${HOME}/.dsh/skills/${SKILL_NAME}"
   "${HOME}/.config/agents/skills/${SKILL_NAME}"
 )
@@ -37,6 +38,26 @@ fi
 
 echo "发现安装位置: $FOUND"
 echo ""
+
+# 0. 多安装根版本一致性（v2.1 T1：一个根装了新版、另一个根仍是旧版时，
+# 只验第一个命中根会对着陈旧副本报"通过"）
+if [ -z "${1:-}" ]; then
+  VER_SEEN=""
+  for c in "${CANDIDATES[@]}"; do
+    [ -f "${c}/SKILL.md" ] || continue
+    v="$(sed -n 's/^  version:[[:space:]]*//p' "${c}/SKILL.md" | head -n 1 | tr -d '\r" ')"
+    if [ -n "$VER_SEEN" ] && [ -n "$v" ] && [ "$v" != "$VER_SEEN" ]; then
+      echo "✗ 版本漂移：$c 为 $v，另一安装根为 $VER_SEEN —— 请把**所有**安装根同步到同一版本后再验证"
+      exit 1
+    fi
+    [ -n "$v" ] && VER_SEEN="$v"
+  done
+  if [ -n "$VER_SEEN" ]; then
+    echo "✅ 全部安装根版本一致（$VER_SEEN）"
+  else
+    echo "·  安装根中未读到 version 字段，跳过多根一致性判断"
+  fi
+fi
 
 fail=0
 SPEC_CHECKED=0

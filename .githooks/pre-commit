@@ -48,6 +48,13 @@ if ! node scripts/check-links.mjs >/tmp/precommit-links.log 2>&1; then
 fi
 echo "[pre-commit] ✅ 链接检查通过"
 
+# 4b. 文档数字主张一致（v2.1 T7：行数/条数主张失真必须让门禁变红）
+if ! node scripts/check-docs.mjs >/tmp/precommit-docs.log 2>&1; then
+  cat /tmp/precommit-docs.log >&2
+  fail "文档行数/条数主张与实况不符 —— 禁止提交"
+fi
+echo "[pre-commit] ✅ 文档主张一致"
+
 # 5. shell 语法
 for f in skills/adversarial-review/scripts/*.sh; do
   bash -n "$f" || fail "shell 语法错误: $f"

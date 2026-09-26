@@ -10,7 +10,13 @@ $SkillName = "adversarial-review"
 $RepoUrl   = "https://github.com/RevolutionLA/adversarial-review.git"
 # skills.sh 结构：skill 位于仓库的 skills/<name>/ 子目录
 $SkillSub  = "skills/$SkillName"
+# 归一化目标目录（去尾部分隔符），再推导备份根：
+# 备份必须落在 skills 目录之外——留在里面的 `.bak.*` 带着同名
+# frontmatter（name: adversarial-review），会与主 skill 抢触发路由
+# （v2.1 三方评审 B4/T6 实证的缺陷）。
+$TargetDir = [System.IO.Path]::GetFullPath($TargetDir.TrimEnd('\','/'))
 $Dest      = Join-Path $TargetDir $SkillName
+$BackupRoot = Join-Path ([System.IO.Path]::GetDirectoryName($TargetDir)) "skill-backups"
 
 function Write-Info($m) { Write-Host "[info] $m" -ForegroundColor Cyan }
 function Write-Ok($m)   { Write-Host "[ ok ] $m" -ForegroundColor Green }
@@ -55,9 +61,10 @@ try {
     # 已有安装：备份而不是直接删除（用户可能有本地自定义修改）
     if (Test-Path $Dest) {
         $oldVer  = Get-SkillVersion (Join-Path $Dest "SKILL.md")
-        $backup  = "$Dest.bak." + (Get-Date -Format "yyyyMMddHHmmss")
+        $backup  = Join-Path $BackupRoot ($SkillName + ".bak." + (Get-Date -Format "yyyyMMddHHmmss"))
         Write-Warn2 "existing install found (version: $oldVer)"
-        Write-Info "backing up to $backup (not deleting — your local edits are preserved there)"
+        Write-Info "backing up to $backup (outside the skills dir, not deleting — your local edits are preserved there)"
+        New-Item -ItemType Directory -Force -Path $BackupRoot | Out-Null
         Move-Item $Dest $backup
         Write-Info "new version: $newVer"
     }

@@ -143,11 +143,11 @@ bash skills/adversarial-review/scripts/verify-install.sh ~/.claude/skills/advers
 
 档位：
 
-| 档位 | 配置 | 适用 |
-|---|---|---|
-| **轻档** | 1 个蓝军（聚焦选定维度）| 小改动、时间紧 |
-| **标准档**（默认）| 蓝军 → 第三方 → 中立裁定，共 3 轮 | 一般功能版本 |
-| **重档** | 标准档 + 多路并行交叉验证 | 发布前、重大重构、涉及上游兼容 |
+| 档位 | 配置 | 相对成本 | 适用 |
+|---|---|---|---|
+| **轻档** | 1 个蓝军（聚焦选定维度）| ~1x | 小改动、时间紧 |
+| **标准档**（默认）| 蓝军 → 第三方 → 中立裁定，共 3 轮 | ~3x | 一般功能版本 |
+| **重档** | 标准档 + 多路并行交叉验证 | ~5-8x | 发布前、重大重构、涉及上游兼容 |
 
 ---
 
@@ -261,7 +261,7 @@ adversarial-review/
 ├── README.md / README.en.md
 ├── skills/
 │   └── adversarial-review/          ← skill 本体（skills.sh 规范结构）
-│       ├── SKILL.md                 ← 主文件（181 行，其中正文 168 行）
+│       ├── SKILL.md                 ← 主文件（177 行，其中正文 168 行）
 │       ├── references/
 │       │   ├── review-dimensions.md ← 19 维度清单
 │       │   ├── prompt-templates.md  ← 三角色提示词模板

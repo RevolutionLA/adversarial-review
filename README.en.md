@@ -146,11 +146,11 @@ No commands to memorise — trigger it in natural language:
 
 Tiers:
 
-| Tier | Configuration | Use for |
-|---|---|---|
-| **Light** | 1 Blue Team subagent (selected dimensions only) | Small changes, tight deadlines |
-| **Standard** (default) | Blue Team → Third Party → Adjudicator, 3 rounds | Normal feature work |
-| **Heavy** | Standard + parallel cross-verification | Pre-release, major refactors, upstream compatibility |
+| Tier | Configuration | Relative cost | Use for |
+|---|---|---|---|
+| **Light** | 1 Blue Team subagent (selected dimensions only) | ~1x | Small changes, tight deadlines |
+| **Standard** (default) | Blue Team → Third Party → Adjudicator, 3 rounds | ~3x | Normal feature work |
+| **Heavy** | Standard + parallel cross-verification | ~5-8x | Pre-release, major refactors, upstream compatibility |
 
 ---
 
@@ -264,7 +264,7 @@ adversarial-review/
 ├── README.md / README.en.md
 ├── skills/
 │   └── adversarial-review/          ← the skill itself (skills.sh layout)
-│       ├── SKILL.md                 ← main file (181 lines, 168 of body)
+│       ├── SKILL.md                 ← main file (177 lines, 168 of body)
 │       ├── references/
 │       │   ├── review-dimensions.md ← 19-dimension checklist
 │       │   ├── prompt-templates.md  ← role prompt templates

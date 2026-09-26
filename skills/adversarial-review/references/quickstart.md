@@ -22,20 +22,21 @@ adversarial review the auth module
 
 | 场景 | 用哪档 | 说这句话 |
 |---|---|---|
-| 改了个小 bug，想快速看一眼 | 轻档 | "轻量审一下这次改动" |
-| 做完一个功能，准备合并 | **标准档**（默认） | "蓝军评审" |
-| 要发版了 / 大重构 / 动了上游兼容 | 重档 | "重档评审，这版要发布" |
+| 改了个小 bug，想快速看一眼 | 轻档（~1x） | "轻量审一下这次改动" |
+| 做完一个功能，准备合并 | **标准档**（默认，~3x） | "蓝军评审" |
+| 要发版了 / 大重构 / 动了上游兼容 | 重档（~5-8x） | "重档评审，这版要发布" |
 
-**不确定就用默认标准档。**
+**不确定就用默认标准档。** "~Nx" 指相对一轮蓝军审查的 token 开销。报告有分级展开与按编号引用纪律（见 SKILL.md「Token 纪律」），不会逐条灌水。
 
 ---
 
 ## 你会拿到什么
 
-跑完后 `docs/review/` 下会有四份报告。**别只看结论，去看证据链**：
+跑完后 `docs/review/` 下会有四份文档。**别只看结论，去看证据链**：
 
 ```bash
 cat docs/review/BLUE-TEAM-REVIEW-*.md       # 蓝军：缺陷 + 证据链
+cat docs/review/RESPONSE-*.md               # 开发团队（主代理）的逐条回应
 cat docs/review/THIRD-PARTY-REVIEW-*.md     # 第三方：修没修对 + 新缺陷
 cat docs/review/ADJUDICATION-*.md           # 中立裁定：最终该修什么
 ```
@@ -68,7 +69,7 @@ cat docs/review/ADJUDICATION-*.md           # 中立裁定：最终该修什么
 **改之前先读两个地方**：
 
 1. **[`prompt-templates.md`](prompt-templates.md)** —— 三个角色的完整提示词模板都在这里。
-2. **`SKILL.md` 的「提示词设计要点」表** —— 列出改模板时**不能丢**的 11 条约束（尤其是"逐维度表态""第三方稽核蓝军覆盖度""裁定方审查共同前提"这三条 v2.0 新增的）。
+2. **[`prompt-templates.md`](prompt-templates.md) 末尾的「设计要点」表** —— 列出改模板时**不能丢**的 12 条约束（尤其是"逐维度表态""第三方稽核蓝军覆盖度""裁定方审查共同前提""分级展开+按编号引用"这四条）。
 
 **要扩展审查范围**（比如想加上"性能"之外的质量属性），改 [`review-dimensions.md`](review-dimensions.md)，不要去改模板——**维度是数据，模板是机制**。
 
@@ -79,6 +80,8 @@ cat docs/review/ADJUDICATION-*.md           # 中立裁定：最终该修什么
 node scripts/validate-skill.mjs skills/adversarial-review
 node scripts/test-validate-skill.mjs    # 校验器自身的回归测试
 node scripts/check-links.mjs            # 检查文档里的本地链接
+node scripts/check-docs.mjs             # 文档中的行数/条数主张与实况一致
+node scripts/test-mutations.mjs         # 突变测试：证明这些检查真能失败
 ```
 
 完整产出样例见 [`../examples/sample-review.md`](../examples/sample-review.md)。

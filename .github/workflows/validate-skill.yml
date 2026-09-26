@@ -75,3 +75,6 @@ jobs:
 
       - name: 校验 markdown 中的本地链接可达
         run: node scripts/check-links.mjs
+
+      - name: 校验文档行数/条数主张与实际内容一致（T7）
+        run: node scripts/check-docs.mjs

@@ -28,6 +28,56 @@ The second one is exactly the failure mode this skill's own first paragraph targ
 >
 > **30-second gut feel**: read a [real review sample](skills/adversarial-review/examples/sample-review.md) with full evidence chains.
 
+### Proof, not adjectives: the gates can actually go red
+
+These are terminal outputs from a real run just now, not mocks and not "we care about quality". The only test of whether a check is worth anything is whether it can fail.
+
+**1) Re-inject the exact "fixed A, broke B" defect → the commit is rejected**
+
+```bash
+# reproduce: put v2.0.1's semantic swap back, then try to commit
+sed -i 's/blockStyle === "folded"/blockStyle === "literal"/' scripts/validate-skill.mjs
+git add -A && git commit -m "demo: injected regression"; echo "exit=$?"
+```
+
+```text
+[pre-commit] 运行门禁检查...
+validate-skill.mjs 回归测试
+--- 二、块标量语义（内容断言，锁住折叠 vs 字面） ---
+  ✗ 折叠块结果应以空格连接，不含换行符
+      折叠块不应含 \n，实际: "line one here\nline two here"
+  ✗ 字面块结果应保留换行符
+      字面块应含 \n，实际: "line one here line two here"
+  ✗ 块标量之后紧跟另一个块标量，状态不应残留
+      description 应是折叠块（不含 \n），实际 "folded one\nfolded two"
+结果: 17 通过, 3 失败
+[pre-commit] ✗ 回归测试未通过 —— 禁止提交（这正是本项目两次事故的根因）
+exit=1
+```
+
+*(labels are Chinese because that's the tool's output — verbatim, untranslated.)*
+
+**2) Touch no code, bend one number in the docs → the fifth gate goes red**
+
+```bash
+# reproduce: change the README's own "168 of body" claim; SKILL.md untouched
+sed -i 's/正文 168 行/正文 177 行/' README.md
+node scripts/check-docs.mjs; echo "exit=$?"
+```
+
+```text
+check-docs: SKILL.md 实测 总 177 行 / frontmatter 9 行 / 正文 168 行；设计要点表 12 条
+  ✅ README.md:310 主张 SKILL.md 总行数 = 177（原文"（177 行"） ✅
+  ✅ skills/adversarial-review/references/skill-spec.md:31 主张 SKILL.md 正文行数 = 168（原文"正文 168 行"） ✅
+  ✗ README.md:310 主张 SKILL.md 正文行数 = 177（原文"正文 177 行"） —— 实测 正文行数为 168
+check-docs: 1 处文档主张与实况不符
+exit=1
+```
+
+That second one is the real class of bug `check-docs.mjs` was built for: **a stale number in the docs while the other four gates stayed green**. It blocked a commit of mine for exactly that.
+
+*(The `README.md:310` line numbers above move whenever the docs change. Line-number rot is itself one of the recurring findings in our own checklist — dimension 17, documentation consistency — so we flag it rather than pretending it's a constant.)*
+
 ---
 
 ## The problem
@@ -212,7 +262,7 @@ Three rounds of self-review during development. What they actually caught:
 ### Quality infrastructure that came out of it
 
 - **`.githooks/pre-commit` gate (five checks)** — regression tests + mutation tests + spec validation + link check + doc-claim guard; any failure blocks the commit. Verified to actually block by re-injecting the bug. (Enable: `git config core.hooksPath .githooks`)
-- **Doc-claim guard** (`scripts/check-docs.mjs`, new in v2.1) — extracts numeric claims ("SKILL.md has N lines", "the design-points table has M rows") from CHANGELOG/README and diffs them against reality. **Its first run caught the author's own stale line counts** (175→177 unsynced).
+- **Doc-claim guard** (`scripts/check-docs.mjs`, new in v2.1) — extracts numeric claims ("SKILL.md has N lines", "the design-points table has M rows") from CHANGELOG/README and diffs them against reality. **Its first run caught the author's own stale line counts** (175→177 unsynced). Verbatim tool output inside fenced code blocks is *not* a claim (otherwise this README couldn't demo its own gate going red); prose is still scanned, and a floor guard requires at least two line-count claim pairs to be extracted, so losing coverage errors out instead of passing silently.
 - **Mutation testing** (`scripts/test-mutations.mjs`) — injects 11 defects into the code and checks whether the regression tests **can catch them**. Currently **10 caught / 0 escaped / 1 equivalent mutant**.
   - **Why it's needed**: green tests ≠ effective tests. This project's regression suite once let 5 mutations escape — including one where deleting the length-limit check caused a **1235-character illegal description to be reported as passing**.
 - **Agent Skills spec validator** (`scripts/validate-skill.mjs`) — zero-dependency, usable as a general-purpose tool for your own skills.
@@ -262,12 +312,14 @@ Don't say "verified by an independent third party". Say "**adversarially reviewe
 
 ## Repo layout
 
+The main file `SKILL.md` is (177 lines, 168 of body) after frontmatter — those two numbers are not hand-typed: `check-docs.mjs` measures them against the file and a stale number blocks the commit.
+
 ```
 adversarial-review/
 ├── README.md / README.en.md
 ├── skills/
 │   └── adversarial-review/          ← the skill itself (skills.sh layout)
-│       ├── SKILL.md                 ← main file (177 lines, 168 of body)
+│       ├── SKILL.md                 ← main file
 │       ├── references/
 │       │   ├── review-dimensions.md ← 19-dimension checklist
 │       │   ├── prompt-templates.md  ← role prompt templates

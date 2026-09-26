@@ -28,6 +28,54 @@
 >
 > **30 秒看懂它怎么工作**：读一份带完整证据链的[真实评审样例](skills/adversarial-review/examples/sample-review.md)。
 
+### 眼见为实：门禁**能**失败，这两段是刚跑出来的真实输出
+
+不是示意图，不是"我们很注重质量"这类话。检查有没有价值，唯一的标准是它**能不能变红**。
+
+**① 把那个"修 A 引入 B"的确切缺陷重新塞回去 → 提交被拒绝**
+
+```bash
+# 复现：重新注入 v2.0.1 的语义反转（folded 分支条件改成 literal），然后 git commit
+sed -i 's/blockStyle === "folded"/blockStyle === "literal"/' scripts/validate-skill.mjs
+git add -A && git commit -m "demo: injected regression"; echo "exit=$?"
+```
+
+```text
+[pre-commit] 运行门禁检查...
+validate-skill.mjs 回归测试
+--- 二、块标量语义（内容断言，锁住折叠 vs 字面） ---
+  ✗ 折叠块结果应以空格连接，不含换行符
+      折叠块不应含 \n，实际: "line one here\nline two here"
+  ✗ 字面块结果应保留换行符
+      字面块应含 \n，实际: "line one here line two here"
+  ✗ 块标量之后紧跟另一个块标量，状态不应残留
+      description 应是折叠块（不含 \n），实际 "folded one\nfolded two"
+结果: 17 通过, 3 失败
+[pre-commit] ✗ 回归测试未通过 —— 禁止提交（这正是本项目两次事故的根因）
+exit=1
+```
+
+**② 代码一个字不动，只把文档里的一个数字改歪 → 第五道门禁变红**
+
+```bash
+# 复现：把 README 的"正文 168 行"改成"正文 177 行"（SKILL.md 完全没动）
+sed -i 's/正文 168 行/正文 177 行/' README.md
+node scripts/check-docs.mjs; echo "exit=$?"
+```
+
+```text
+check-docs: SKILL.md 实测 总 177 行 / frontmatter 9 行 / 正文 168 行；设计要点表 12 条
+  ✅ README.md:310 主张 SKILL.md 总行数 = 177（原文"（177 行"） ✅
+  ✅ skills/adversarial-review/references/skill-spec.md:31 主张 SKILL.md 正文行数 = 168（原文"正文 168 行"） ✅
+  ✗ README.md:310 主张 SKILL.md 正文行数 = 177（原文"正文 177 行"） —— 实测 正文行数为 168
+check-docs: 1 处文档主张与实况不符
+exit=1
+```
+
+第二段就是 `check-docs.mjs` 上线当晚抓到的那类问题（**作者写的数字过期了，其余四道门禁全绿**）。它当时是真的让我提交失败了一次。
+
+> 上面输出的行号（`README.md:310`）会随文档增删而变——**行号引用会腐烂**这件事本身就是本 skill 的第 17 维度（文档一致性）反复抓到的缺陷，所以我们把它显式标出来，而不是假装它是常量。
+
 ---
 
 ## 它解决什么问题
@@ -209,7 +257,7 @@ docs/review/
 ### 由此引入的质量设施
 
 - **`.githooks/pre-commit` 门禁（五道）** —— 回归测试 + 突变测试 + 规范校验 + 链接检查 + 文档主张守护，任一失败即拒绝提交。已用破坏性测试验证它真能拦住。（启用：`git config core.hooksPath .githooks`）
-- **文档主张守护**（`scripts/check-docs.mjs`，v2.1 新增）—— 从 CHANGELOG/README 提取"SKILL.md 多少行""设计要点几条"这类**数字主张**，与实测比对，不符即红。**它上线第一次实战就抓到作者自己的行数漂移**（175→177 未同步）。
+- **文档主张守护**（`scripts/check-docs.mjs`，v2.1 新增）—— 从 CHANGELOG/README 提取"SKILL.md 多少行""设计要点几条"这类**数字主张**，与实测比对，不符即红。**它上线第一次实战就抓到作者自己的行数漂移**（175→177 未同步）。围栏代码块内逐字引用的工具输出**不**算主张（否则本 README 无法演示它自己怎么变红），但正文照扫，且有一条兜底：正文里至少要有两组行数主张被提取到，提取覆盖度掉了同样报错。
 - **突变测试**（`scripts/test-mutations.mjs`）—— 自动往代码里注入 11 个缺陷，验证回归测试**能不能抓住**。当前 **10 抓住 / 0 逃逸 / 1 等价突变**。
   - **为什么需要它**：测试全绿 ≠ 测试有效。本项目的回归测试曾漏掉 5 个突变，其中"删掉长度上限校验"会让一个**1235 字符的非法 description 被判通过**。
 - **Agent Skills 规范校验器**（`scripts/validate-skill.mjs`）—— 零依赖，可作为通用工具用于你自己的 skill。
@@ -259,12 +307,14 @@ docs/review/
 
 ## 仓库结构
 
+主文件 `SKILL.md`（177 行，其中 frontmatter 之后的正文 168 行）——这两个数字不是手写的，`check-docs.mjs` 会实测对账，写错就提交不了。
+
 ```
 adversarial-review/
 ├── README.md / README.en.md
 ├── skills/
 │   └── adversarial-review/          ← skill 本体（skills.sh 规范结构）
-│       ├── SKILL.md                 ← 主文件（177 行，其中正文 168 行）
+│       ├── SKILL.md                 ← 主文件
 │       ├── references/
 │       │   ├── review-dimensions.md ← 19 维度清单
 │       │   ├── prompt-templates.md  ← 三角色提示词模板

@@ -13,6 +13,9 @@
 //     （及 CHANGELOG"表扩为 N 条"主张）。
 //
 // 提取防错位（委托方点名要求自查的坑）：
+//  - **围栏代码块内的行不参与对账**：``` 里逐字引用的工具输出（例如 README 演示
+//    check-docs 自己变红的样子）不是作者对当前文件的主张，把它当主张会让
+//    "展示门禁如何失败"的文档永远无法自洽。作者的主张写在正文里，正文照扫。
 //  - CHANGELOG 只扫最新 `## [x.y.z]` 条目，历史条目中的旧数字（如 2.0.x
 //    时代的"255 行"）不参与对账；
 //  - 同一行必须提到 `SKILL.md` 才算主张所在行；含"不再/已过期/原为"等
@@ -94,8 +97,20 @@ function claimsInLine(line) {
   return out;
 }
 
+function fencedMask(lines) {
+  const mask = new Array(lines.length).fill(false);
+  let open = false;
+  for (let i = 0; i < lines.length; i++) {
+    const marker = /^\s*(```|~~~)/.test(lines[i]);
+    if (marker) open = !open;
+    mask[i] = open;
+  }
+  return mask;
+}
+
 function scanLineClaims(file, text, { firstEntryOnly = false } = {}) {
   const lines = text.split("\n");
+  const inFence = fencedMask(lines);
   let stop = lines.length;
   if (firstEntryOnly) {
     // 只扫最新 `## [` 条目（到下一个 `## [` 为止）
@@ -103,10 +118,10 @@ function scanLineClaims(file, text, { firstEntryOnly = false } = {}) {
     if (start === -1) return;
     const next = lines.findIndex((l, i) => i > start && /^## \[/.test(l));
     stop = next === -1 ? lines.length : next;
-    for (let i = start; i < stop; i++) collect(file, lines[i], i + 1);
+    for (let i = start; i < stop; i++) if (!inFence[i]) collect(file, lines[i], i + 1);
     return;
   }
-  for (let i = 0; i < stop; i++) collect(file, lines[i], i + 1);
+  for (let i = 0; i < stop; i++) if (!inFence[i]) collect(file, lines[i], i + 1);
 }
 
 function collect(file, line, lineNo) {

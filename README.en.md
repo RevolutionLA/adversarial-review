@@ -70,7 +70,7 @@ exit=1
 
 *(Labels are Chinese because that's the tool's output — verbatim, untranslated. The elision now lives **in the command**: `grep -vE "^  ✅|^$|^--- 一、"` drops passing cases, blank lines and the section-1 heading, so what you see is byte-for-byte what that command prints. The previous version of this block had been trimmed by hand — several failing cases were simply missing from it (3 here, 2 in the Chinese README), which is exactly finding T5 in the second external review.)*
 
-**2) Touch no code, bend one number in the docs → the fifth gate goes red**
+**2) Touch no code, bend one number in the docs → the fifth gate (`check-docs.mjs`) goes red**
 
 ```bash
 # reproduce: change the README's own "正文 173 行" claim; SKILL.md untouched
@@ -79,8 +79,8 @@ node scripts/check-docs.mjs 2>&1 | grep -E "^check-docs:|^  ✗"; echo "exit=${P
 ```
 
 ```text
-check-docs: SKILL.md 实测 总 182 行 / frontmatter 9 行 / 正文 173 行；设计要点表 13 条；维度 19 项；门禁 6 道；用例 校验器 24 / 机检器 20；突变 22 条；版本 2.4.0
-  ✗ README.md:448 主张 SKILL.md 正文行数 = 180（原文"正文 180 行"） —— 实测 正文行数为 173
+check-docs: SKILL.md 实测 总 182 行 / frontmatter 9 行 / 正文 173 行；设计要点表 13 条；维度 19 项；门禁 6 道；用例 校验器 24 / 机检器 29；突变 26 条；版本 2.5.0
+  ✗ README.md:460 主张 SKILL.md 正文行数 = 180（原文"正文 180 行"） —— 实测 正文行数为 173
 check-docs: 1 处文档主张与实况不符
 exit=1
 ```
@@ -109,15 +109,17 @@ check-report: 4 条缺陷（第 29 行的总表），3 条声称实测（其中�
 exit=0
 ```
 
-That first example predates the rule, so it **deserves** to fail — the linter doesn't grant grandfather status to the author's own docs. Its regression suite (`scripts/test-check-report.mjs`, 20 cases, 5 of which assert *passing*) stops it from cheating by failing everything.
+That first example predates the rule, so it **deserves** to fail — the linter doesn't grant grandfather status to the author's own docs. Its regression suite (`scripts/test-check-report.mjs`, 29 cases, 8 of which assert *passing*) stops it from cheating by failing everything.
 **v2.3 changed how evidence is collected: per finding, in place.** Until then the linter just counted how many times the four characters 「复现命令」 appeared anywhere in the report — an external reviewer proved that **typing those four characters once lets through any number of fabricated high-severity findings**. Counting-based checks are gameable by construction.
-**v2.4 went one step further: from "is something there" to "does it look like a command".** The second review round showed that v2.3 still rubber-stamped a report with *zero* commands: `- **复现命令**：\`见附录\`` passed, because the test was only "two backticks with ≥3 characters inside" (T1), and the evidence window was written `end + 9`, so one script dropped into the appendix right after a section served every high finding in the report (T2). Commands must now sit **inside the finding's own section** and actually look like a command (ASCII program name + argument, or a pipe/redirect/path).
+**v2.4 went one step further: from "is something there" to "does it look like a command".** The second review round showed that v2.3 still rubber-stamped a report with *zero* commands: `- **复现命令**：\`见附录\`` passed, because the test was only "two backticks with ≥3 characters inside" (T1), and the evidence window was written `end + 9`, so one script dropped into the appendix right after a section served every high finding in the report (T2). Commands must now sit **inside the finding's own section** and actually look like a command.
 
-**4) The same zero-command report: the v2.3 linter stamps it, v2.4 refuses it**
+**v2.5 discovered that "look like" was itself the hole.** The third review round translated the same attack into English — `` - **复现命令**：`see appendix` `` — and the linter stamped it again; pasting a source snippet or an `npm ERR!` log line worked too (U1/U6), while real one-word commands like `make` and `pytest` were flagged as fake (U2). **A shape-based test only blocks Chinese placeholders.** The check is now lexical: the first token must be a known executable name (`node`, `make`, `pytest`…) or a path-shaped script (`./install.sh`), followed by an argument or pipe, and program-output-looking lines (tracebacks, `at Foo.bar(`) are rejected up front.
+
+**4) Two zero-command reports: the old linter blocked the Chinese placeholder only, the new one blocks both**
 
 ```bash
-# step 1: build the fixture the external reviewer used — label present, inline code is a placeholder
-mkdir -p docs/review && cat > docs/review/bypass-t1.md <<'MD'
+# step 1: two fixtures — label present, inline code is a placeholder; the second is the same thing in English
+mkdir -p docs/review && cat > docs/review/bypass-cn.md <<'MD'
 # 蓝军报告
 
 ## 缺陷总表
@@ -134,26 +136,28 @@ mkdir -p docs/review && cat > docs/review/bypass-t1.md <<'MD'
 
 （略）
 MD
+sed 's/`见附录`/`see appendix`/' docs/review/bypass-cn.md > docs/review/bypass-en.md
 
-# step 2: pull the v2.3 linter out of the tag and point both versions at the same file
-git show v2.3.0:skills/adversarial-review/scripts/check-report.mjs > /tmp/cr-2.3.mjs
-node /tmp/cr-2.3.mjs docs/review/bypass-t1.md; echo "v2.3 exit=$?"
-node skills/adversarial-review/scripts/check-report.mjs docs/review/bypass-t1.md; echo "v2.4 exit=$?"
+# step 2: pull the v2.4 linter out of the tag and point both versions at the same two files
+git show v2.4.0:skills/adversarial-review/scripts/check-report.mjs > /tmp/cr-2.4.mjs
+for f in cn en; do
+  node /tmp/cr-2.4.mjs docs/review/bypass-$f.md >/dev/null 2>&1; e1=$?
+  node skills/adversarial-review/scripts/check-report.mjs docs/review/bypass-$f.md >/dev/null 2>&1; e2=$?
+  echo "占位词（$f）: v2.4 exit=$e1 / v2.5 exit=$e2"
+done
+node /tmp/cr-2.4.mjs docs/review/bypass-en.md   # verbatim: the old linter passing the English placeholder
 ```
 
 ```text
-check-report: docs/review/bypass-t1.md
+占位词（cn）: v2.4 exit=1 / v2.5 exit=1
+占位词（en）: v2.4 exit=0 / v2.5 exit=1
+check-report: docs/review/bypass-en.md
 check-report: 1 条缺陷（第 5 行的总表），1 条声称实测（其中高危 1 条），逐条取证通过（全文有效「复现命令」1 处）
-v2.3 exit=0
-check-report: docs/review/bypass-t1.md
-  ✗ B1：写了「复现命令」却没有一条像命令的内容 —— 后面的行内代码/围栏块里找不到"命令名 + 参数"或含管道·重定向的片段（`见附录`、`TODO`、纯说明文字都不算证据）
-check-report: 1 处不符合「未经实测不得定高危」约束（高危须逐条取证）
-v2.4 exit=1
 ```
 
-*(This demo is a product of the review itself, and we deliberately did not write it as "we fixed it": the previous version's failure is kept reproducible **via its own tag**, so anyone can confirm that v2.3 really did pass a report containing no commands. The fixture lives under `docs/review/`, which is gitignored and not shipped.)*
+*(This demo records a hole **in our own previous release**: v2.4 claimed to test "does it look like a command", but `见附录` was rejected only by the non-ASCII rule, while `see appendix` passed for being plain ASCII with two words. **Translating an attack defeats a shape test** — that is why the judge is lexical now. The old version stays reproducible through its own tag, so anyone can confirm v2.4 really did rubber-stamp the English placeholder. Fixtures live under `docs/review/`, which is gitignored and not shipped.)*
 
-*(The `README.md:448` line numbers above move whenever the docs change. Line-number rot is itself one of the recurring findings in our own checklist — documentation consistency, dimension 17 — so we flag it rather than pretending it's a constant. All four blocks were regenerated by re-running the repros after this edit, not hand-patched.)*
+*(The `README.md:460` line numbers above move whenever the docs change. Line-number rot is itself one of the recurring findings in our own checklist — documentation consistency, dimension 17 — so we flag it rather than pretending it's a constant. All four blocks were regenerated by re-running the repros after this edit, not hand-patched.)*
 
 ---
 
@@ -250,18 +254,18 @@ Copy-Item -Recurse -Force ".\adversarial-review\skills\adversarial-review" "$env
 
 ### Option 3 — one-line installer
 
-The URLs are pinned to a **reviewed release tag** (`v2.3.0`), not to `main` — a one-liner pointed at `main` pipes whatever unreviewed commit landed an hour ago straight into your skills directory.
+The URLs are pinned to a **reviewed release tag** (`v2.5.0`), not to `main` — a one-liner pointed at `main` pipes whatever unreviewed commit landed an hour ago straight into your skills directory.
 
 **Read it, then run it** (two steps, ~30 seconds):
 
 ```bash
 # Step 1: read the script first — where it writes, what it does to an existing install
-curl -fsSL https://raw.githubusercontent.com/RevolutionLA/adversarial-review/v2.4.0/skills/adversarial-review/scripts/install.sh | less
+curl -fsSL https://raw.githubusercontent.com/RevolutionLA/adversarial-review/v2.5.0/skills/adversarial-review/scripts/install.sh | less
 ```
 
 ```bash
 # Step 2: run it once you agree with what you read
-curl -fsSL https://raw.githubusercontent.com/RevolutionLA/adversarial-review/v2.4.0/skills/adversarial-review/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/RevolutionLA/adversarial-review/v2.5.0/skills/adversarial-review/scripts/install.sh | bash
 ```
 
 <details>
@@ -269,9 +273,9 @@ curl -fsSL https://raw.githubusercontent.com/RevolutionLA/adversarial-review/v2.
 
 ```powershell
 # Step 1: read
-irm https://raw.githubusercontent.com/RevolutionLA/adversarial-review/v2.4.0/skills/adversarial-review/scripts/install.ps1 | more
+irm https://raw.githubusercontent.com/RevolutionLA/adversarial-review/v2.5.0/skills/adversarial-review/scripts/install.ps1 | more
 # Step 2: run
-irm https://raw.githubusercontent.com/RevolutionLA/adversarial-review/v2.4.0/skills/adversarial-review/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/RevolutionLA/adversarial-review/v2.5.0/skills/adversarial-review/scripts/install.ps1 | iex
 ```
 </details>
 
@@ -373,7 +377,7 @@ Where the analogy breaks — deliberately:
 
 1. **There is no defence counsel.** Cross-examination and exclusionary rules exist because **human cases cannot be replayed**: yesterday's scene is gone, so truth has to be reconstructed by two sides pulling at each other. Code can be run again at any time, so the whole cross-examination stage is replaced by **just execute it**. The author's slot is `RESPONSE-<version>.md` (per-item accept / defer / reject) — that is **the defendant speaking for themselves**, not retained counsel. Making one model also play defence buys two things only: performable advocacy, and a **shared-premise amplifier** (same model, so defence agrees with prosecution in exactly the wrong place).
 2. **No separation of powers is needed.** Investigation is split from prosecution to constrain **coercive force** — whoever searches must not decide who is charged. The Blue Team cannot change a line of code or block a release; it can only write findings. **No force, no warrants.**
-3. **The evidence rules are stricter, not looser.** Law asks for "beyond reasonable doubt"; we have one machine-checkable equivalent: **no unverified finding may be graded high**. A reasoning-only conclusion caps at 🟡; 🔴/🟠 must ship a command that can be re-run and the actual output it produced. The reason isn't fastidiousness, it's **incentives**: unlinked grading lets a model "claim it ran it" to make a finding look important. So the Third Party re-runs each one and demotes anything that doesn't reproduce, and a linter backs the rule up (sixth gate, below).
+3. **The evidence rules are stricter, not looser.** Law asks for "beyond reasonable doubt"; we have one machine-checkable equivalent: **no unverified finding may be graded high**. A reasoning-only conclusion caps at 🟡; 🔴/🟠 must ship a command that can be re-run and the actual output it produced. The reason isn't fastidiousness, it's **incentives**: unlinked grading lets a model "claim it ran it" to make a finding look important. So the Third Party re-runs each one and demotes anything that doesn't reproduce, and a linter backs the rule up (the sixth gate `test-check-report.mjs`, below).
 
 > In one line: **every role in this loop exists because somebody in the room can lie.** The Blue Team guards against the author lying, the Third Party against the Blue Team lying, the Adjudicator against both lying together, and the gates against everyone pretending they looked.
 
@@ -391,14 +395,16 @@ Three rounds of self-review during development. What they actually caught:
 | **v2.0.2 Adjudicator** | **The fix introduced a new bug** — `>` and `|` parsing semantics were swapped, and that commit **shipped with its own tests red**; the install-verify script **reported a fake "passed" to users** |
 | **v2.1.0, two full rounds** | Blue Team: 11 findings (false "landed in all templates" claim, stale installed copy, backups hijacking trigger routing…) → Third Party: 14 findings proving **round-1 remediation only partially landed**, `verify-install` printing "🎉 passed" against a stale copy, and **all four gates blind to this entire defect class** → Adjudicator: re-graded 2, rejected 1 suggestion, and implemented the fifth gate on the spot |
 | **v2.4.0, external review round 2 (6 findings)** | The reviewer re-checked every one of our fixes (14 landed, 1 partial), then proved "per finding, in place" was only half done: `- **复现命令**：\`见附录\`` let a 🔴 through with `exit 0` (the test was only "does a backtick exist"), and the `end + 9` evidence window let one appendix script serve every high finding. **"A code block exists somewhere" is as gameable as a keyword count.** The other four: template 2 never stated the format the linter requires, the Nth-gate naming audit was immune inside long sentences, the first-screen demo had a hand-deleted section with no elision marker, and finding IDs with regex metacharacters crashed the linter. The stingiest part was their section 7: **18 green mutations coexisted with both bypasses** — the target list simply had no "evidence boundary" shape in it |
+| **v2.4.0, external review round 3 (6 findings)** | The same trick came back after one translation: `` - **复现命令**：`see appendix` `` let a 🔴 through with `exit 0`, and so did a pasted source snippet or an `npm ERR!` log line (U1/U6) — while real one-word commands (`make`, `pytest`) were flagged red (U2). **A shape test had only been blocking Chinese placeholders; only lexicon converges.** The ugliest one was U3: the reviewer replaced `commandish` with `return true` and *nothing* went red — 20 cases passed, the mutation suite still reported "21 caught / 0 escaped", because none of those 22 targets had the shape "weaken the current judge". Third time the same coverage hole recurred, so v2.5 writes the meta-rule into `CONTRIBUTING.md` |
 
 ### Quality infrastructure that came out of it
 
 - **`.githooks/pre-commit` gate (six checks)** — regression tests + mutation tests + spec validation + link check + doc-claim guard + report-linter tests; any failure blocks the commit. Verified to actually block by re-injecting the bug. (Enable: `git config core.hooksPath .githooks`)
-- **Doc-claim guard** (`scripts/check-docs.mjs`, new in v2.1, extended in v2.3) — extracts numeric claims ("SKILL.md has N lines", "the design-points table has M rows", "the gate has N checks", "the suite has N cases", "the installer is pinned to tag X") from CHANGELOG/README and diffs them against reality. **Its first run caught the author's own stale line counts** (175→177 unsynced). Verbatim tool output inside fenced code blocks is *not* a claim (otherwise this README couldn't demo its own gate going red); prose is still scanned, and a floor guard requires at least two line-count claim pairs to be extracted, so losing coverage errors out instead of passing silently. Since v2.3 it also runs an **extractor self-test** on synthetic fixture lines — skip rules are code too, and they can be weakened to silence a check. It guards `scripts/test-validate-skill.mjs` (24 cases) and `scripts/test-check-report.mjs` (20 cases) as well; since v2.4 its self-test fixture set also covers the *Nth-gate naming* audit (a wrong script named inside a long sentence must be caught, a correct one must not) — `check-docs.mjs` has no external test suite, so that fixture block is its only proof that it can fail.
-- **Mutation testing** (`scripts/test-mutations.mjs`) — injects 22 defects (12 into the validator, 10 into the report linter) and checks whether the regression tests **can catch them**. Latest real run: **21 caught / 0 escaped / 1 equivalent mutant / 0 invalid**; mutations are applied to temp copies only, never the working tree.
+- **Doc-claim guard** (`scripts/check-docs.mjs`, new in v2.1, extended in v2.3) — extracts numeric claims ("SKILL.md has N lines", "the design-points table has M rows", "the gate has N checks", "the suite has N cases", "the installer is pinned to tag X") from CHANGELOG/README and diffs them against reality. **Its first run caught the author's own stale line counts** (175→177 unsynced). Verbatim tool output inside fenced code blocks is *not* a claim (otherwise this README couldn't demo its own gate going red); prose is still scanned, and a floor guard requires at least two line-count claim pairs to be extracted, so losing coverage errors out instead of passing silently. Since v2.3 it also runs an **extractor self-test** on synthetic fixture lines — skip rules are code too, and they can be weakened to silence a check. It guards `scripts/test-validate-skill.mjs` (24 cases) and `scripts/test-check-report.mjs` (29 cases) as well; since v2.4 its self-test fixture set also covers the *Nth-gate naming* audit (a wrong script named inside a long sentence must be caught, a correct one must not) and the first-screen demo's block count, and v2.5 makes that count readable in Arabic numerals (`these 4 blocks` is audited like `all four blocks`) while **Nth-gate ordinals with no script name in the sentence are self-reported as unverifiable** instead of passing silently — `check-docs.mjs` has no external test suite, so that fixture block is its only proof that it can fail.
+- **Mutation testing** (`scripts/test-mutations.mjs`) — injects 26 defects (12 into the validator, 14 into the report linter) and checks whether the regression tests **can catch them**. Latest real run: **25 caught / 0 escaped / 1 equivalent mutant / 0 invalid**; mutations are applied to temp copies only, never the working tree.
+  - **Why it exists**: the round-3 reviewer set `commandish` to `return true` and *nothing* went red — 20 cases still passed and the suite still reported "21 caught / 0 escaped", because every target in that list had the shape "revert to the old implementation", none had the shape "weaken the current judge". v2.5 added four weakening targets (P11–P14) and wrote the meta-rule into `CONTRIBUTING.md`.
   - **Why it's needed**: green tests ≠ effective tests. This project's regression suite once let 5 mutations escape — including one where deleting the length-limit check caused a **1235-character illegal description to be reported as passing**. Since v2.3 the report linter is itself a mutation target: a linter that only ever passes compliant reports is as dangerous as no linter.
-- **Report linter** (`skills/adversarial-review/scripts/check-report.mjs`, new in v2.2, per-finding evidence in v2.3, shape-based evidence in v2.4, **shipped with the skill**) — machine-checks the Blue Team summary table: a 🔴/🟠 may only be graded high on a *measured* basis, each "measured" high finding must carry **inside its own section** a repro command that actually looks like a command, and no location cell may be empty. **Why it exists**: "you must verify" is prose — a model that wants its finding to look important will simply claim it ran the check. Binding grade to evidence and having the Third Party re-run it is what turns fabrication into a *detectable* defect. Its regression suite (`scripts/test-check-report.mjs`, 20 cases = 5 green + 14 red + 1 usage error, each asserting the error text, not just the exit code) is the sixth gate.
+- **Report linter** (`skills/adversarial-review/scripts/check-report.mjs`, new in v2.2, per-finding evidence in v2.3, shape-based evidence in v2.4, lexical evidence in v2.5, **shipped with the skill**) — machine-checks the Blue Team summary table: a 🔴/🟠 may only be graded high on a *measured* basis, each "measured" high finding must carry **inside its own section** a repro command that is an actual command (executable name + arguments, or a path-shaped script), and no location cell may be empty. **Why it exists**: "you must verify" is prose — a model that wants its finding to look important will simply claim it ran the check. Binding grade to evidence and having the Third Party re-run it is what turns fabrication into a *detectable* defect. Its regression suite (`scripts/test-check-report.mjs`, 29 cases = 8 green + 20 red + 1 usage error, each asserting the error text, not just the exit code) is the sixth gate.
 - **Agent Skills spec validator** (`scripts/validate-skill.mjs`) — zero-dependency, usable as a general-purpose tool for your own skills.
 
 ---
@@ -412,6 +418,14 @@ Three rounds of self-review during development. What they actually caught:
 - ❌ **Cannot catch**: **shared blind spots** — e.g. a mutual misunderstanding of an upstream system's behaviour
 
 **Implication**: if a conclusion depends on external system behaviour, it must be **empirically verified** — not settled by two agents nodding at each other.
+
+**The report linter has a ceiling too**, and pretending otherwise would turn it into a "certification":
+
+- It checks **lexicon** (is the first token an executable name, is there an argument after it), not *did this command actually run*. `node fake.js --evidence` is lexically perfect and still gets stamped.
+- It checks *a command sits in this section*, not *the output below it was produced rather than typed*. Whether the output is real is pushed entirely onto the Third Party's re-run — which is why that step must actually execute the commands, not read about them.
+- The whitelist itself is **hand-enumerated**: an unfamiliar bare task name gets killed by mistake (`just test`, `uvx ruff check src/` are red today). Any unknown name passes as soon as it carries one flag or path-shaped argument (`xtask --release`), and the error text states that requirement verbatim. **False kills are a chosen cost** — pinned as a test case, so anyone widening the whitelist must update this paragraph in the same commit.
+
+- Its mutation list (P1–P14) is a **hand-enumerated** set of shapes; "0 escaped" only proves the listed ones are caught. Round 3 demonstrated this by replacing the judge with `return true`, so v2.5 added four *weakening* targets and wrote the meta-rule ("every new judge ships a weakening target") into `CONTRIBUTING.md`.
 
 Don't say "verified by an independent third party". Say "**adversarially reviewed by different roles of the same model**".
 
@@ -461,11 +475,12 @@ adversarial-review/
 │       │   └── skill-spec.md        ← SKILL.md spec cheat sheet
 │       ├── examples/                ← one compliant sample + one pre-rule historical sample
 │       └── scripts/                 ← install, verify & report-lint scripts (shipped)
+├── CONTRIBUTING.md                    ← the judge-strength meta-rule (what a new predicate must ship with)
 ├── scripts/                         ← repo-level tooling (not installed with the skill)
 │   ├── validate-skill.mjs           ← Agent Skills spec validator
 │   ├── test-validate-skill.mjs      ← validator regression tests
 │   ├── test-check-report.mjs        ← report linter regression tests
-│   ├── test-mutations.mjs           ← mutation testing (two targets)
+│   ├── test-mutations.mjs           ← mutation testing (26 injected defects)
 │   ├── check-docs.mjs               ← doc numeric-claim guard
 │   └── check-links.mjs              ← markdown link checker
 └── .githooks/pre-commit             ← commit gate

@@ -172,6 +172,30 @@ const SUITES = [
         replace: `    if (open < from || open >= to) continue;
     if (close > open + 8) continue; // [mutated] 复刻 v2.4 前的判据：整块必须在窗口里`,
       },
+      // P11–P14 的形状与 P7–P10 不同：**不是"退回旧实现"，而是"把当前判据削弱一档"**。
+      // 外部评审第三轮 U3 实测：v2.4 的 25 条靶子里没有一条攻击 commandish 的强度，
+      // 把 commandish 改成 `return true` 之后 20 用例与 21 抓住/0 逃逸一个都不掉。
+      // 这四条的存在理由就是把"削弱判据"这一类形状钉进名单。
+      {
+        name: "P11 非 ASCII 检查置废（命令名混中文说明即被放行，评审 U1 的另一半）",
+        find: `  if (!asciiOutsideQuotes(t)) return false;`,
+        replace: `  // [mutated] 非 ASCII 检查已删除`,
+      },
+      {
+        name: "P12 可执行名白名单置废（`make` / `pytest` 被判红，评审 U2 的误报回归）",
+        find: `  if (EXEC.has(head)) return true;`,
+        replace: `  // [mutated] 白名单判定已删除`,
+      },
+      {
+        name: "P13 认不出的首 token 一律放行（`see appendix` 复活，评审 U1）",
+        find: `  return toks.slice(i + 1).some((x) => ARGISH.test(x));`,
+        replace: `  return true;`,
+      },
+      {
+        name: "P14 报错日志识别置废（`npm ERR! ...` 当成命令，评审 U6）",
+        find: `  if (LOOKS_LIKE_OUTPUT.test(t)) return false;`,
+        replace: `  // [mutated] 输出日志判据已删除`,
+      },
     ],
   },
 ];

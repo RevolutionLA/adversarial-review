@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// check-report.mjs — 蓝军/第三方「缺陷总表」机检器（v2.4.0）
+// check-report.mjs — 蓝军/第三方「缺陷总表」机检器（v2.5.0）
 //
 // 为什么需要："必须实证"写进 SKILL.md 也只是一句**散文约束**——模型想让
 // 自己的高危结论有分量时，会直接声称"我跑过了"而根本没跑。v2.2 把定级与
@@ -17,6 +17,14 @@
 // `end + 9`，命令可以塞进紧随其后的附录里被全部高危共用。**教训是同一类**：
 // "存在某段代码块"这种判据永远能被占位词喂饱，判据必须落到内容形状上
 // （commandish：命令名 + 参数，或含管道/重定向/路径），窗口必须封在本条目自己名下。
+//
+// v2.5 修掉的三个绕过（外部评审第三轮 U1/U2/U6）：v2.4 的"形状"判据其实只挡住了
+// **中文**占位词——`see appendix`、`Run the script in the appendix…`、一段源码、
+// 一行 npm 报错日志全都能盖章（U1/U6），而真命令 `make`、`pytest` 反被判红（U2）。
+// **教训又升了一级**：占位词是语义问题，形状判据换个自然语言就失效；能收敛的只有
+// 词法——首 token 必须是可执行程序名（或 `./x`、`x.sh` 这类带路径的脚本），
+// 认不出的名字必须带一个参数形状。判据强度本身还配了 4 条"削弱型"突变靶子（P11–P14），
+// 否则"退回旧实现"之外的第三种破坏方式无人看守（评审 U3）。
 //
 // 只管 🔴/🟠，不管 🟡（评审 R4）：模板规定 🟡 不展开，若要求 🟡 也贴命令，
 // 完全合规的产出会被判红——而误报会让人直接关掉检查，比漏报更糟。
@@ -90,19 +98,72 @@ function fencePairs(lines) {
   return pairs;
 }
 
-// 「像一条命令」判据（评审 T1：旧实现只要求"有两个反引号包着 ≥3 个字符"，
-// 于是 `- **复现命令**：\`见附录\`` 就能给 🔴 盖章——代价比 v2.2 的凑字数更低）。
-// 宁可漏认也不放过占位词：单个裸词（`TODO` / `make`）不足以证明跑过什么，
-// 所以要求"命令名 + 参数"或"含 shell 元字符/路径"。报错信息会把这条要求写明白。
+// 「像一条命令」判据（第三版，评审 U1/U2/U6）。
+// v2.4 版只看形状（纯 ASCII + 多 token + 首 token 含点或斜杠），于是
+// `see appendix`、`notes.md`、一段源码、一行 npm 报错日志全都能盖章（U1/U6），
+// 而真命令 `make` / `pytest` 反被判红（U2）。占位词是**语义**问题，形状判据封不死，
+// 所以改成：首 token 必须是常见可执行程序名（或 `./x`、`/usr/bin/x`、`install.sh` 这类带路径的脚本），
+// 程序名之后还要跟得上参数/元字符/路径。宁可错杀不认识的裸命令，也不放过编造的英文短语——
+// 报错信息会把这条要求原样写明白。
+const EXEC = new Set(`
+  node npm npx pnpm yarn bun deno tsx ts-node
+  python python3 pip pip3 uv poetry pytest tox ruff mypy black flake8
+  go cargo rustc make cmake gcc g++ clang meson ninja
+  java javac kotlin kotlinc scala mvn gradle dotnet swift
+  php composer ruby gem bundle rspec rails
+  git gh glab svn hg
+  bash sh zsh dash pwsh powershell cmd bat fish
+  cat head tail less more wc sort uniq cut tr sed awk grep egrep fgrep rg fd find xargs
+  ls ll pwd cd echo printf test diff patch comm
+  tar zip unzip gzip gunzip xz 7z rsync scp cp mv rm mkdir touch chmod chown ln
+  curl wget httpie jq yq awk
+  docker podman nerdctl kubectl helm kind minikube terraform pulumi ansible
+  openssl ssh sftp nc dig nslookup ping traceroute
+  mysql psql sqlite3 redis-cli mongo
+  tsc eslint prettier stylelint vitest jest mocha playwright cypress karma
+  code idea vim vi nano emacs touch
+  convert magick ffmpeg ffprobe imagemagick
+  systemctl service journalctl ps kill killall top htop lsof df du free id whoami
+  apt apt-get yum dnf pacman brew choco scoop winget
+  ldd nm objdump gdb valgrind strace ltrace
+  tree file which whereis man history alias env print
+`.trim().split(/\s+/));
+// 这些是"前缀命令"，本身不说明跑了什么，要看它后面那个 token
+const WRAPPER = new Set(["sudo", "doas", "env", "time", "nohup", "command", "builtin"]);
+const IDENT = /^[a-z][a-z0-9]*(?:[-+.][a-z0-9]+)*$/;
+// `./x` `/usr/bin/x` `~/.local/bin/x` `foo.sh` `run.ps1` `main.py` `build.bat`
+const PATHY = /^(?:[.~]?\/[\w.\/+-]+|[\w.+-]+\.(?:sh|bash|ps1|py|mjs|cjs|js|ts|rb|pl|php|bat|cmd|exe))$/;
+// 参数形状：flag、路径、`~/x`。源码片段里的 `(x` / `===` / `{` 都不在此列
+const ARGISH = /^[-./~@]/;
+// 行首就长得像**程序输出**的（报错、traceback、栈帧），不是命令
+const LOOKS_LIKE_OUTPUT =
+  /^(?:[\w.$-]*Error\b|Traceback|panic:|fatal:|Exception\b|npm\s+ERR!|ERR!|\bat\s[\w.$<>]+\()/;
+
+// 「必须是纯 ASCII」这条检查的作用是把 `见附录`、`make （见下一节）` 这类**说明文字**挡在证据之外。
+// 但它不能连引号里的内容一起管：`sed -i 's/正文 173 行/正文 180 行/' README.md` 是我们自己 README
+// 里的一条真命令，参数天生带中文。所以只看**引号之外**的字符（评审 U2 的误报面）。
+function asciiOutsideQuotes(t) {
+  return /^[\x20-\x7e]+$/.test(t.replace(/"[^"]*"|'[^']*'|`[^`]*`/g, '""'));
+}
+
 function commandish(raw) {
   const t = String(raw).trim().replace(/^[$>]\s+/, "").trim();
   if (!t) return false;
-  if (!/^[\x20-\x7e]+$/.test(t)) return false; // 含中文/省略号 → 是说明文字，不是命令
+  if (!asciiOutsideQuotes(t)) return false; // 引号之外含中文/省略号 → 是说明文字，不是命令
+  if (LOOKS_LIKE_OUTPUT.test(t)) return false;
   if (/^(?:TODO|TBD|FIXME|N\/A|none|null|\.{2,}|-+)$/i.test(t)) return false;
-  const [head, ...rest] = t.split(/\s+/);
-  if (!/^[A-Za-z_.\/~@][\w.\/@+:%,-]*$/.test(head)) return false;
-  return rest.length > 0 || /[|&><$;]/.test(t) || /[/.]/.test(head);
+  const toks = t.split(/\s+/);
+  let i = 0;
+  while (i < toks.length && WRAPPER.has(toks[i].toLowerCase())) i += 1;
+  const head = toks[i] || "";
+  if (PATHY.test(head)) return true; // `./install.sh`、`/usr/bin/make`：带路径形状即真命令
+  if (!IDENT.test(head)) return false; // 大写开头、带括号引号的（源码片段）一律不算
+  // 认识的程序名：`make`、`pytest` 这类裸命令也必须认，否则就是误报（评审 U2）
+  if (EXEC.has(head)) return true;
+  // 认不出的名字：不猜，要求它至少带一个 flag/路径形状的参数
+  return toks.slice(i + 1).some((x) => ARGISH.test(x));
 }
+
 
 const inlineCommands = (line) =>
   [...line.matchAll(/`([^`\n]+)`/g)].map((m) => m[1]);
@@ -172,8 +233,9 @@ function entryEvidence(lines, fence, pairs, tableIdx, ids, id) {
     // 逐条取证当场退化回全文有一处就行。
     if (inlineCommands(lines[i]).some(commandish)) return null;
     if (fenceCommand(lines, pairs, i + 1, end)) return null;
-    return `${id}：写了「复现命令」却没有一条像命令的内容 —— 后面的行内代码/围栏块里` +
-      `找不到"命令名 + 参数"或含管道·重定向的片段（\`见附录\`、\`TODO\`、纯说明文字都不算证据）`;
+    return `${id}：写了「复现命令」却没有一条像命令的内容 —— 行内代码/围栏块里要找的是` +
+      `「可执行程序名（node / make / pytest / ./x.sh …）+ 参数或管道」这样的真命令；` +
+      `\`见附录\`、\`see appendix\`、\`notes.md\`、源码片段、报错日志都不算证据`;
   }
   return `${id}：声称实测，但自己的展开段落里没有「复现命令」 —— 只在总表里写"实测"两个字不构成证据`;
 }

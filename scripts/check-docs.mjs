@@ -54,6 +54,8 @@ const rel = (f) => f.slice(ROOT.length + 1).replace(/\\/g, "/");
 
 const failures = [];
 const checked = [];
+// 无锚点的「第 N 道门禁」序数主张：机检器知道自己核对不了，须在结尾自曝（评审 U5）
+const unanchoredOrdinals = [];
 const extracted = []; // 所有被识别出的主张（无论对错），供"提取错位防护"计数
 
 // ---------- 实测值 ----------
@@ -307,7 +309,7 @@ const versionOf = (text) => /(?:^|\n)\s*version:\s*"?(\d+\.\d+\.\d+)"?/.exec(tex
 const skillVersion = versionOf(skillText);
 const changelogVersion = /^\s*##\s*\[(\d+\.\d+\.\d+)\]/m.exec(read(CHANGELOG_MD))?.[1] ?? null;
 
-const hits = { dims: 0, gateCount: 0, cases: 0, installUrl: 0, demoBlocks: 0 };
+const hits = { dims: 0, gateCount: 0, cases: 0, installUrl: 0, installProse: 0, demoBlocks: 0 };
 const caseSuiteHits = { "test-validate-skill.mjs": 0, "test-check-report.mjs": 0 };
 const assert = (file, lineNo, label, actual, claimed, hitKey) => {
   if (hitKey) hits[hitKey]++;
@@ -328,6 +330,17 @@ function scriptNearby(lines, lineNo, lookahead = 4) {
   return null;
 }
 
+/**
+ * 「第 N 道门禁」这句话锚在哪个脚本上：句内点名优先，否则退回就近 4 行（演示块里常这样写）。
+ * 两处都没有 → null，即"这条序数主张我核对不了"（评审 U5：静默通过等于假装通过）。
+ */
+function gateAnchor(lines, lineNo) {
+  const line = lines[lineNo - 1] || "";
+  if (/\.mjs/.test(line)) return line;
+  const near = scriptNearby(lines, lineNo);
+  return near ? ` ${near} ` : null;
+}
+
 const GATE_CN_COUNT = /(?<!第)([一二三四五六七八九十]{1,3}|\d{1,3})\s*道门禁/g;
 const GATE_CN_COUNT_PAREN = /门禁（([一二三四五六七八九十]{1,3}|\d{1,3})\s*道）/g;
 const GATE_CN_ORD = /第([一二三四五六七八九十]{1,3}|\d{1,3})道门禁/;
@@ -335,11 +348,13 @@ const GATE_EN_COUNT = /\(\s*(one|two|three|four|five|six|seven|eight|nine|ten|\d
 const GATE_EN_ORD = /\b(?:the|as)\s+(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|\d+)\s+gate\b/i;
 const CASE_CLAIM = /(\d{1,3})\s*(?:个)?\s*用例/;
 // 首屏"眼见为实"那几段演示的**段数主张**（本轮文档自审抓到：演示从三段增到四段后，
-// 标题仍写"这三段"、省略说明仍写"截到 4 条"）。只认总量句式，"第一段/这一段/第 ④ 段"
-// 这类序数或单指不参与对账，否则正常的逐段讲解会全变噪音。
-const DEMO_CN_TOTAL = /(?:下面|这|以上|全部)\s*([二三四五六七八九十])\s*段/g;
-const DEMO_CN_TAIL = /([二三四五六七八九十])\s*段(?:演示|实测|输出)/g;
-const DEMO_EN_TOTAL = /\b(?:all|the)\s+(two|three|four|five|six)\s+(?:demo\s+)?(?:blocks?|outputs?)\b/gi;
+// 只认总量句式，"第一段/这一段/第 ④ 段"这类序数或单指不参与对账，否则正常的逐段讲解会全变噪音。
+// 数字三种写法都得收（评审 U4：只收中文数字时，把"这四段"改写成"这 4 段"就逃过对账——
+// 一条为了"同一个上午被抓到段数写错"而生的规则，不能只挡住当时那一种写法）。
+const DEMO_CN_TOTAL = /(?:下面|这|以上|全部)\s*([二三四五六七八九十]|\d{1,2})\s*段/g;
+const DEMO_CN_TAIL = /([二三四五六七八九十]|\d{1,2})\s*段(?:演示|实测|输出)/g;
+const DEMO_EN_TOTAL =
+  /\b(?:all|the)\s+(two|three|four|five|six|\d{1,2})\s+(?:demo\s+)?(?:blocks?|outputs?)\b/gi;
 const GREEN_RED = /(\d{1,3})\s*绿\s*[+＋]\s*(\d{1,3})\s*红(?:\s*[+＋]\s*(\d{1,3})\s*用法错误)?/;
 // "第 17 维度"是**序数**（第 17 号维度），不是条数主张。回溯排除时要把
 // 位数也吃进去，否则正则会退一步从"7 维度"匹配出个假主张。
@@ -376,15 +391,15 @@ function demoBlockCount(text) {
   return circled + numbered;
 }
 
-/** 一行里的"演示总段数"主张 → [{n, idx, raw}]，同一位置只计一次 */
+/** 一行里的"演示总段数"主张 → [{n, idx, raw}]，重叠命中只算一次主张 */
 function demoClaimsInLine(line) {
   const out = [];
-  const seen = new Set();
   for (const re of [DEMO_CN_TOTAL, DEMO_CN_TAIL, DEMO_EN_TOTAL]) {
     re.lastIndex = 0;
     for (const m of line.matchAll(re)) {
-      if (seen.has(m.index)) continue;
-      seen.add(m.index);
+      // 「下面这 3 段演示」会被总量句式和尾部句式各抓一次，那是同一处主张
+      if (out.some((x) => m.index < x.idx + x.raw.length && x.idx < m.index + m[0].length))
+        continue;
       const n = toNum(m[1]);
       if (n !== null) out.push({ n, idx: m.index, raw: m[0] });
     }
@@ -418,17 +433,19 @@ function scanNumericClaims(file, text, { lineOffset = 0 } = {}) {
         failures.push(`${rel(file)}:${no} ${label} 越界 —— 当前共 ${actualGates.length} 道`);
       } else {
         const gate = actualGates[idx - 1];
-        // 句内没有脚本名时退回"就近 4 行内点名的脚本"（演示块里常这样写）
-        const wrong = misnamedGates(
-          /\.mjs/.test(line) ? line : ` ${scriptNearby(lines, rawNo) || ""} `,
-          idx
-        );
-        if (wrong.length) {
-          failures.push(
-            `${rel(file)}:${no} ${label} 实为 ${gate}，但同一句里点名了第 ${[...new Set(wrong.map((s) => gateOwners.get(s)))].join("、")} 道的脚本：${wrong.join("、")}`
-          );
+        const anchor = gateAnchor(lines, rawNo);
+        if (anchor === null) {
+          // 无锚点：序数改错在静态层面无从对账，属于能力边界——但**不装作通过**，结尾自曝（评审 U5）
+          unanchoredOrdinals.push(`${rel(file)}:${no} ${label}（实为 ${gate}）`);
         } else {
-          checked.push(`${rel(file)}:${no} ${label} = ${gate} ✅`);
+          const wrong = misnamedGates(anchor, idx);
+          if (wrong.length) {
+            failures.push(
+              `${rel(file)}:${no} ${label} 实为 ${gate}，但同一句里点名了第 ${[...new Set(wrong.map((s) => gateOwners.get(s)))].join("、")} 道的脚本：${wrong.join("、")}`
+            );
+          } else {
+            checked.push(`${rel(file)}:${no} ${label} = ${gate} ✅`);
+          }
         }
       }
     }
@@ -476,12 +493,20 @@ function scanNumericClaims(file, text, { lineOffset = 0 } = {}) {
   // install 一行流：URL 在 ```bash 代码块里，但那是**给读者复制的指令**，
   // 不是逐字引用的工具输出，所以它必须参与对账（R12：钉在已评审的 tag 上）。
   lines.forEach((line, i) => {
+    const want = changelogVersion ? `v${changelogVersion}` : null;
     for (const m of line.matchAll(/https?:\/\/\S+/g)) {
       if (!/^https?:\/\/raw\.githubusercontent\.com\/[^/\s]+\/[^/\s]+\/[^/\s]+\/.*install\.(sh|ps1)/.test(m[0])) continue;
       hits.installUrl++;
       const ref = m[0].split("/")[5];
-      const want = changelogVersion ? `v${changelogVersion}` : null;
       assert(file, i + 1 + lineOffset, "install 一行流锚定的 ref", want, ref, null);
+    }
+    // 正文里"锚定在 `vX.Y.Z`"这种**独立反引号包住的裸 tag**同样是主张（本次文档自审抓到：
+    // URL 已由上一条守护，正文那句却连 stale 了两版）。
+    // `git show v2.4.0:…` 这种带上下文的引用不算——那是刻意指向旧版。
+    if (HISTORY_ROW.test(line)) return;
+    for (const m of line.matchAll(/`v(\d+\.\d+\.\d+)`/g)) {
+      hits.installProse++;
+      assert(file, i + 1 + lineOffset, "正文锚定的 tag", want, `v${m[1]}`, null);
     }
   });
 }
@@ -508,6 +533,7 @@ for (const [key, need, what] of [
   ["dims", 1, "维度条数"],
   ["gateCount", 1, "门禁道数"],
   ["installUrl", 2, "install 一行流 ref"],
+  ["installProse", 1, "正文锚定的 tag"],
   ["demoBlocks", 1, "首屏演示段数"],
 ]) {
   if (hits[key] < need) {
@@ -594,6 +620,9 @@ function selfTest() {
   // 后者一旦被当成主张，逐段讲解的文档会永远红，下一个人就会把整条规则删掉。
   const demoCases = [
     { line: "### 眼见为实：这四段是刚跑出来的真实输出", want: [4], why: "「这 N 段」是总量主张" },
+    { line: "### 眼见为实：这 4 段是刚跑出来的真实输出", want: [4], why: "阿拉伯数字写法同样要抓到（评审 U4：只挡中文数字即换个写法再犯）" },
+    { line: "All 4 blocks were regenerated", want: [4], why: "英文阿拉伯数字总量句式" },
+    { line: "下面 3 段演示各自对应一道门禁", want: [3], why: "「下面 N 段」是总量主张" },
     { line: "All four blocks were regenerated", want: [4], why: "英文总量句式" },
     { line: "第一段就是 check-docs 上线当晚抓到的问题", want: [], why: "序数不是总量" },
     { line: "下面第 ④ 段是这两条绕过的现场复现", want: [], why: "单指某段不是总量" },
@@ -611,6 +640,29 @@ function selfTest() {
   }
   if (demoBlockCount("**1) a\n\n**2) b") !== 2) {
     failures.push("演示段数自检失败：英文编号演示块计数被改坏（**1)/**2) 应为 2）");
+  }
+
+  // 「第 N 道门禁」有没有锚点：判据强度自检（评审 U5 + CONTRIBUTING 的元规则）。
+  // 把 gateAnchor 改成永远返回 line，第三条即失败——这条语料就是"无锚点须自曝"的证明。
+  const anchorCases = [
+    { lines: ["第五道门禁（`check-docs.mjs`）变红"], want: true, why: "句内点名即有锚" },
+    {
+      lines: ["第五道门禁变红", "```bash", "node scripts/check-docs.mjs"],
+      want: true,
+      why: "句内无脚本名时退回就近 4 行",
+    },
+    {
+      lines: ["第六道门禁变红", "", "", "", "", "node scripts/check-docs.mjs"],
+      want: false,
+      why: "超出就近窗口即无锚 —— 必须自曝核对不了，不得静默当作通过",
+    },
+  ];
+  for (const a of anchorCases) {
+    const got = gateAnchor(a.lines, 1) !== null;
+    if (got !== a.want)
+      failures.push(
+        `门禁锚点自检失败（${a.why}）：语料「${a.lines[0]}」应判${a.want ? "有锚" : "无锚"}，实际判${got ? "有锚" : "无锚"}`
+      );
   }
 }
 selfTest();
@@ -630,3 +682,8 @@ if (failures.length) {
   process.exit(1);
 }
 console.log(`check-docs: ${checked.length} 处文档主张全部与实况一致`);
+if (unanchoredOrdinals.length) {
+  console.log(
+    `  ⓘ ${unanchoredOrdinals.length} 处「第 N 道门禁」序数主张句内无脚本名，机检器核对不了（改错序数不会红）：${unanchoredOrdinals.join("；")} —— 在句里补上脚本名即可变成可核对的主张`
+  );
+}

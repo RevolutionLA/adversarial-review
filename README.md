@@ -6,6 +6,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Agent Skill](https://img.shields.io/badge/Agent%20Skill-SKILL.md-blue.svg)](skills/adversarial-review/SKILL.md)
+[![skills.sh](https://img.shields.io/badge/skills.sh-adversarial--review-0b7285.svg)](https://www.skills.sh/revolutionla/adversarial-review)
 [![Works with](https://img.shields.io/badge/works%20with-Claude%20Code%20%7C%20DeepSeek%20Harness%20%7C%20Cursor%20%7C%20Codex-green.svg)](#兼容性)
 
 **安装**：`npx skills add RevolutionLA/adversarial-review`（详见 [安装](#安装)）
@@ -228,6 +229,8 @@ npx skills add RevolutionLA/adversarial-review -a claude-code
 # 一次装到多个 agent
 npx skills add RevolutionLA/adversarial-review -a claude-code -a cursor -a opencode
 ```
+
+列表页：<https://www.skills.sh/revolutionla/adversarial-review>。在 skills.sh 上按关键词搜 `adversarial review` **搜不到我们**——那个索引按安装量硬截断前 200 条（2026-09-27 实测入榜最低 3 次安装，而命中 `adversarial-review` 的已有 57 条），所以请用上面的直链，或 `skills find adversarial --owner revolutionla`。
 
 ### 方式二：手动复制
 

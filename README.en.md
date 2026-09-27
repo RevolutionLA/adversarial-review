@@ -6,6 +6,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Agent Skill](https://img.shields.io/badge/Agent%20Skill-SKILL.md-blue.svg)](skills/adversarial-review/SKILL.md)
+[![skills.sh](https://img.shields.io/badge/skills.sh-adversarial--review-0b7285.svg)](https://www.skills.sh/revolutionla/adversarial-review)
 [![Works with](https://img.shields.io/badge/works%20with-Claude%20Code%20%7C%20DeepSeek%20Harness%20%7C%20Cursor%20%7C%20Codex-green.svg)](#compatibility)
 
 **Install**: `npx skills add RevolutionLA/adversarial-review` (see [Install](#install))
@@ -231,6 +232,8 @@ npx skills add RevolutionLA/adversarial-review -a claude-code
 # Install to several agents at once
 npx skills add RevolutionLA/adversarial-review -a claude-code -a cursor -a opencode
 ```
+
+Listing: <https://www.skills.sh/revolutionla/adversarial-review>. Searching skills.sh for `adversarial review` **will not find us** — that index hard-caps results at the top 200 entries ranked by install count (measured 2026-09-27: the lowest listed entry had 3 installs, and 57 entries already match `adversarial-review`). Use the direct link above, or `skills find adversarial --owner revolutionla`.
 
 ### Option 2 — manual copy
 

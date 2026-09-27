@@ -3,12 +3,29 @@
 set -uo pipefail
 
 SKILL_NAME="adversarial-review"
-CANDIDATES=(
+# 显式清单只覆盖"写清单时想到的宿主"。v2.5 轮换安装根时实测：Codex 的根
+# （~/.codex/skills）不在清单里，多根一致性检查于是静默跳过一份陈旧副本，
+# 照样打印"✅ 全部安装根版本一致"——v2.1 T1 那条"只验第一个命中根"的缺陷
+# 换了个位置复活。所以清单之外再做一层点目录发现：宿主根都在 $HOME 的
+# 一层隐藏目录下（.claude/.codex/.cursor/.qoder/.trae/...），glob 不递归，成本恒定。
+EXPLICIT=(
   "${HOME}/.claude/skills/${SKILL_NAME}"
   "${HOME}/.agents/skills/${SKILL_NAME}"
+  "${HOME}/.codex/skills/${SKILL_NAME}"
   "${HOME}/.dsh/skills/${SKILL_NAME}"
   "${HOME}/.config/agents/skills/${SKILL_NAME}"
 )
+
+CANDIDATES=()
+for c in "${EXPLICIT[@]}" "${HOME}"/.*/skills/"${SKILL_NAME}"; do
+  [ -f "${c}/SKILL.md" ] || continue
+  real="$(cd "$c" 2>/dev/null && pwd -P)" || continue
+  dup=0
+  for r in "${CANDIDATES[@]}"; do
+    [ "$r" = "$real" ] && { dup=1; break; }
+  done
+  [ "$dup" -eq 0 ] && CANDIDATES+=("$real")
+done
 
 FOUND=""
 
@@ -24,19 +41,21 @@ fi
 
 if [ -z "$FOUND" ]; then
   for c in "${CANDIDATES[@]}"; do
-    if [ -f "${c}/SKILL.md" ]; then FOUND="$c"; break; fi
+    FOUND="$c"; break
   done
 fi
 
 if [ -z "$FOUND" ]; then
   echo "✗ 未找到 ${SKILL_NAME}，已检查以下位置："
-  for c in "${CANDIDATES[@]}"; do echo "    - $c"; done
+  for c in "${EXPLICIT[@]}"; do echo "    - $c"; done
+  echo "    - ${HOME}/.*/skills/${SKILL_NAME}（自动发现各宿主的点目录安装根）"
   echo ""
   echo "请先安装，或手动指定路径: bash scripts/verify-install.sh /your/skills/dir"
   exit 1
 fi
 
 echo "发现安装位置: $FOUND"
+echo "核对安装根: ${#CANDIDATES[@]} 个"
 echo ""
 
 # 0. 多安装根版本一致性（v2.1 T1：一个根装了新版、另一个根仍是旧版时，

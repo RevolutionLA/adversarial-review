@@ -81,8 +81,8 @@ node scripts/check-docs.mjs 2>&1 | grep -E "^check-docs:|^  ✗"; echo "exit=${P
 ```
 
 ```text
-check-docs: SKILL.md 实测 总 182 行 / frontmatter 9 行 / 正文 173 行；设计要点表 13 条；维度 19 项；门禁 6 道；用例 校验器 24 / 机检器 29；突变 26 条；版本 2.5.0
-  ✗ README.md:460 主张 SKILL.md 正文行数 = 180（原文"正文 180 行"） —— 实测 正文行数为 173
+check-docs: SKILL.md 实测 总 182 行 / frontmatter 9 行 / 正文 173 行；设计要点表 13 条；维度 19 项；门禁 6 道；用例 校验器 24 / 机检器 29；突变 26 条；版本 2.5.1
+  ✗ README.md:463 主张 SKILL.md 正文行数 = 180（原文"正文 180 行"） —— 实测 正文行数为 173
 check-docs: 1 处文档主张与实况不符
 exit=1
 ```
@@ -157,7 +157,7 @@ check-report: 1 条缺陷（第 5 行的总表），1 条声称实测（其中�
 
 > 这段演示是本轮评审的产物，而且它记录的是**我们自己那一版的洞**：v2.4 的判据号称"验像不像"，实际只挡住了中文占位词——`见附录` 被非 ASCII 检查拦下，`see appendix` 因为"是纯 ASCII 且有两个词"被当成了一条命令。**换一种自然语言就绕过一层防御**，这说明"形状"根本不是个可靠判据，词法（可执行程序名 / 带路径的脚本）才是。上一版的失败现场连同它的 tag 一起留在仓库里，任何人都能重跑确认 v2.4 确实放行过英文占位词。构造文件写在 `docs/review/`（该目录被 gitignore，不随包发布）。
 
-> 上面输出的行号（`README.md:460`）会随文档增删而变——**行号引用会腐烂**这件事本身就是本 skill 的第 17 维度（文档一致性）反复抓到的缺陷，所以我们把它显式标出来，而不是假装它是常量。这四段输出在本次改完文档后**又各自重跑了一遍**才贴上来，不是手改的数字。
+> 上面输出的行号（`README.md:463`）会随文档增删而变——**行号引用会腐烂**这件事本身就是本 skill 的第 17 维度（文档一致性）反复抓到的缺陷，所以我们把它显式标出来，而不是假装它是常量。这四段输出在本次改完文档后**又各自重跑了一遍**才贴上来，不是手改的数字。
 
 ---
 
@@ -251,18 +251,18 @@ Copy-Item -Recurse -Force ".\adversarial-review\skills\adversarial-review" "$env
 
 ### 方式三：一行安装脚本
 
-脚本锚定在**已评审的发布版本**上（`v2.5.0`），不指向 `main`——一行流装的是"你看不见的当下最新"，而 `main` 上任何一次未评审的提交都会顺着管道进你的 skill 目录。
+脚本锚定在**已评审的发布版本**上（`v2.5.1`），不指向 `main`——一行流装的是"你看不见的当下最新"，而 `main` 上任何一次未评审的提交都会顺着管道进你的 skill 目录。
 
 **先看再跑**（两步，30 秒）：
 
 ```bash
 # 第 1 步：先把脚本读一遍（它会写到哪个目录、动了你已有的安装怎么办，全在里头）
-curl -fsSL https://raw.githubusercontent.com/RevolutionLA/adversarial-review/v2.5.0/skills/adversarial-review/scripts/install.sh | less
+curl -fsSL https://raw.githubusercontent.com/RevolutionLA/adversarial-review/v2.5.1/skills/adversarial-review/scripts/install.sh | less
 ```
 
 ```bash
 # 第 2 步：确认无误后再执行
-curl -fsSL https://raw.githubusercontent.com/RevolutionLA/adversarial-review/v2.5.0/skills/adversarial-review/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/RevolutionLA/adversarial-review/v2.5.1/skills/adversarial-review/scripts/install.sh | bash
 ```
 
 <details>
@@ -270,13 +270,13 @@ curl -fsSL https://raw.githubusercontent.com/RevolutionLA/adversarial-review/v2.
 
 ```powershell
 # 第 1 步：先看
-irm https://raw.githubusercontent.com/RevolutionLA/adversarial-review/v2.5.0/skills/adversarial-review/scripts/install.ps1 | more
+irm https://raw.githubusercontent.com/RevolutionLA/adversarial-review/v2.5.1/skills/adversarial-review/scripts/install.ps1 | more
 # 第 2 步：再跑
-irm https://raw.githubusercontent.com/RevolutionLA/adversarial-review/v2.5.0/skills/adversarial-review/scripts/install.ps1 | iex
+irm https://raw.githubusercontent.com/RevolutionLA/adversarial-review/v2.5.1/skills/adversarial-review/scripts/install.ps1 | iex
 ```
 </details>
 
-> 这个版本号不是手写的：`check-docs.mjs` 会把上面两条 URL 里的 `v2.5.0` 与 CHANGELOG 最新版本号对账，改一处忘另一处就提交不了。
+> 这个版本号不是手写的：`check-docs.mjs` 会把上面两条 URL 里的 `v2.5.1` 与 CHANGELOG 最新版本号对账，改一处忘另一处就提交不了。
 
 > 已有安装时，脚本会把旧副本**备份到 skills 目录之外的 `skill-backups/`** 再覆盖——你本地的自定义修改不会丢，备份也不会滞留成"抢路由的幽灵 skill"。备份只保留最近 3 份。
 
@@ -287,6 +287,8 @@ bash skills/adversarial-review/scripts/verify-install.sh
 # 或指定路径
 bash skills/adversarial-review/scripts/verify-install.sh ~/.claude/skills/adversarial-review
 ```
+
+> 裸跑时它会核对**所有安装根**的版本一致性：宿主根是自动发现的（`$HOME` 下一层点目录，如 `~/.claude`、`~/.codex`、`~/.qoder`），不依赖手写的宿主清单——v2.5 就是因为清单漏了 Codex 的根，对着陈旧副本打印过一句"全部安装根版本一致"。发现漂移即退出码 1，并指名是哪个根。（本机实测：`bash skills/adversarial-review/scripts/verify-install.sh` 输出 `核对安装根: 3 个`。）
 
 > ⚠️ 校验器（`validate-skill.mjs`）位于**仓库**的 `scripts/`，不随 skill 安装。因此从安装副本运行时，脚本会明确告诉你"**规范校验未执行，不能视为完整验证**"并返回退出码 2——**它不会给你一个空的"通过"**。
 
@@ -402,6 +404,7 @@ docs/review/
 - **报告机检器**（`skills/adversarial-review/scripts/check-report.mjs`，v2.2 新增、v2.3 改逐条就近、v2.4 改判据形状、v2.5 改词法判据，**随 skill 一起安装**）—— 机检蓝军总表：🔴/🟠 的「定级依据」必须是实测、每条声称实测的高危须在**自己小节内**配「复现命令」+ 一条真命令（可执行程序名 + 参数，或 `./x.sh` 这类带路径的脚本）、位置列不许为空。**为什么非要有它**：`必须实证` 四个字是散文约束，模型想让结论显得够重要时会直接声称"我跑过了"；只有把定级和实测绑定、再让第三方原样重跑，编造才会变成**可发现的缺陷**。它的回归测试（`scripts/test-check-report.mjs`，29 用例 = 8 绿 + 20 红 + 1 用法错误，每个用例既断言退出码也断言报错文本）构成第六道门禁。
 - **突变测试**（`scripts/test-mutations.mjs`）—— 自动往代码里注入 26 个缺陷（校验器 12 + 报告机检器 14），验证两套测试**能不能抓住**。最近一次实跑：**25 抓住 / 0 逃逸 / 1 等价突变 / 0 无效突变**；突变只作用于临时副本，不碰工作区文件。
   - **为什么需要它**：测试全绿 ≠ 测试有效。本项目的回归测试曾漏掉 5 个突变，其中"删掉长度上限校验"会让一个**1235 字符的非法 description 被判通过**。v2.3 起被突变的对象还包括**报告机检器自己**——一个只会放过合规报告的机检器，和没有机检器一样危险。**但"0 逃逸"只证明已列举的形状都被抓**：第三轮评审把 `commandish` 整个改成 `return true`，当时的 22 条靶子与 20 用例一个都不掉——因为那批靶子的形状全是"会不会退回旧实现"，没有"新判据本身够不够强"。v2.5 的 P11–P14 就是这一类形状（把判据放宽一档），规则写在 `CONTRIBUTING.md`。
+- **装机自检的回归测试**（`scripts/test-verify-install.sh`，6 用例，v2.5.1 新增）—— 被测对象是随包发布的 `verify-install.sh` 自己：清单内两根漂移须红、**清单里根本没写过的宿主目录**下的陈旧副本须红、核对的根数须如实打印、未安装时的排查清单须包含自动发现那条路径、显式指定路径时不得宣称"多根已核对"。它接在 pre-commit 的 shell 语法步之后、CI 同步接入（与 `.ps1` 语法检查同级，不计入那六道 node 门禁）。动因是自曝 T11：v2.5.0 发布后，这台"防止装机验证骗人"的脚本对本机的 `~/.codex` 陈旧副本打印过一句"全部安装根版本一致"——**U3 那句归因第一次落在我们自己身上**，而且是我们自己在发布流程里撞见的。
 - **Agent Skills 规范校验器**（`scripts/validate-skill.mjs`）—— 零依赖，可作为通用工具用于你自己的 skill。
 
 ---
@@ -477,6 +480,7 @@ adversarial-review/
 │   ├── validate-skill.mjs           ← Agent Skills 规范校验器
 │   ├── test-validate-skill.mjs      ← 校验器回归测试
 │   ├── test-check-report.mjs        ← 报告机检器的回归测试
+│   ├── test-verify-install.sh       ← 装机自检脚本的回归测试
 │   ├── test-mutations.mjs           ← 突变测试（给校验器与机检器分别下毒）
 │   ├── check-docs.mjs               ← 文档数字主张守护
 │   └── check-links.mjs              ← markdown 链接检查

@@ -5,7 +5,7 @@ license: MIT
 compatibility: 需要一个能派发独立子代理（subagent）的宿主（Claude Code / DeepSeek Harness / Cursor / Codex 等）。若无子代理能力，降级为单 agent 串行扮演三角色，并在报告中如实声明独立性已显著削弱。
 metadata:
   author: RevolutionLA
-  version: "2.5.0"
+  version: "2.5.1"
 ---
 
 # 三方对抗式代码评审（Blue Team / Third Party / Adjudication）

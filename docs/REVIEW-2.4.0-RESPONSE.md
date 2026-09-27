@@ -20,6 +20,7 @@
 | U6 🟡 源码片段/报错日志当命令 | 采纳 | `check-report.mjs:139` `LOOKS_LIKE_OUTPUT` 先剔除"长得像程序输出"的行 + 首 token 必须小写标识符 | 用例 24（围栏内源码片段）、25（围栏内 `npm ERR!`）/ 突变 P14（日志判据置废即逃逸）；v2.4 对这两份构造都是 `exit=0` |
 | T9（自查）正文里的独立 tag 主张无人对账 | 采纳 | `check-docs.mjs:508` 正文 `` `vX.Y.Z` `` 与 CHANGELOG 最新版本对账 + `:536` 提取兜底门槛 | 把 `README.md:254` 的 tag 改旧一档即红；本轮实况：URL 已是 v2.5.0，正文那句曾连 stale 两版（v2.3.0） |
 | T10（自查）新判据第一版把自家演示命令判红 | 采纳 | `check-report.mjs:146` `asciiOutsideQuotes()`：ASCII 判定只看**引号之外**，`sed -i 's/正文 173 行/正文 180 行/' README.md` 恢复放行 | 用例 27（**绿**断言：引号内含中文的 sed 必须算命令）/ 若把该检查退回整串纯 ASCII，这条当场失败——这正是 U2 的复发形状，我们差点在自己身上再犯一次 |
+| T11（自查，v2.5.0 发布后）装机自检器静默漏掉一个宿主根 | 采纳 | `verify-install.sh:14` 安装根改为**显式清单 ∪ 一层点目录自动发现**，并新增 `scripts/test-verify-install.sh`（6 用例）接进 pre-commit 与 CI | 同一份套件打在 v2.5.0 那份脚本上是 `2 通过 / 4 失败`，改动后 `6 通过 / 0 失败`（现场复现见第二节末）；U3 那条归因在**我们自己身上**再次成立：v2.5 的 26 条突变靶子与 29 条用例全绿，而"防装机骗人"的那台脚本当时正骗了人 |
 
 上一轮 T1–T8：评审方判定 T2–T7 落地、T1/T8 各留一半——留的两半（英文占位词、阿拉伯数字）正是本版 U1 与 U4，未再重复计分。
 
@@ -210,6 +211,40 @@ check-report: 1 处不符合「未经实测不得定高危」约束（高危须�
   v2.5 exit=1
 ```
 
+### 实验 7 · T11：装机自检器对"清单外的宿主根"报绿（v2.5.0 发布后自查，修在 v2.5.1）
+
+发布 v2.5.0 后按 `DISTRIBUTION-KIT.md` 轮换三个本地安装根，`verify-install.sh` 打印 `✅ 全部安装根版本一致（2.5.0）`——而 `~/.codex` 那份是旧的：**它的候选根清单里没有 Codex 的根**，一致性循环于是静默跳过这份陈旧副本。这就是 U3 那句话的形状：一套全绿的检查，和一个"能骗人的兜底清单"同时成立。修法是清单一层自动发现（glob `$HOME/.*/skills/<name>`），因为**清单靠人记，发现不靠**。
+
+```bash
+# 在假 HOME 里铺两个根，其中一个位于**任何清单都没写过的宿主目录**下，且版本更旧
+mkdir -p /tmp/h/.claude/skills /tmp/h/.unlistedhost/skills
+for r in .claude .unlistedhost; do cp -r skills/adversarial-review /tmp/h/$r/skills/; done
+sed -i 's/version: "2.5.1"/version: "9.9.8"/' /tmp/h/.unlistedhost/skills/adversarial-review/SKILL.md
+git show HEAD:skills/adversarial-review/scripts/verify-install.sh > /tmp/old.sh
+echo "-- v2.5.0 那份脚本"; HOME=/tmp/h bash /tmp/old.sh | sed -n '1,3p'
+echo "-- v2.5.1 那份脚本"; HOME=/tmp/h bash skills/adversarial-review/scripts/verify-install.sh | sed -n '1,4p'; echo "exit=${PIPESTATUS[0]}"
+```
+
+```text
+-- v2.5.0 那份脚本
+发现安装位置: /tmp/h/.claude/skills/adversarial-review
+
+✅ 全部安装根版本一致（2.5.1）
+-- v2.5.1 那份脚本
+发现安装位置: /tmp/h/.claude/skills/adversarial-review
+核对安装根: 2 个
+
+✗ 版本漂移：/tmp/h/.unlistedhost/skills/adversarial-review 为 9.9.8，另一安装根为 2.5.1 —— 请把**所有**安装根同步到同一版本后再验证
+exit=1
+```
+
+回归测试接进 pre-commit 与 CI 后，反向用例按项目纪律先在改前跑红：
+
+```text
+VERIFY_SCRIPT=/tmp/old.sh bash scripts/test-verify-install.sh → test-verify-install: 2 通过 / 4 失败（共 6）
+bash scripts/test-verify-install.sh                            → test-verify-install: 6 通过 / 0 失败（共 6）
+```
+
 ---
 
 ## 三、词法判据的误报面（U2 的另一侧，逐条实跑）
@@ -282,8 +317,9 @@ just test / uvx ruff check src/                    → 判红（**白名单没�
 ```text
 node scripts/test-validate-skill.mjs   → 结果: 24 通过, 0 失败
 node scripts/test-check-report.mjs     → test-check-report: 29 通过 / 0 失败（共 29）
+bash scripts/test-verify-install.sh    → test-verify-install: 6 通过 / 0 失败（共 6）
 node scripts/test-mutations.mjs        → 结果: 25 抓住 / 0 逃逸 / 1 等价突变 / 0 无效突变
-node scripts/check-docs.mjs            → check-docs: 44 处文档主张全部与实况一致
+node scripts/check-docs.mjs            → check-docs: 43 处文档主张全部与实况一致
 node scripts/check-links.mjs           → 扫描 30 个 markdown 文件 … ✅ 所有本地链接可达
 node skills/adversarial-review/scripts/check-report.mjs skills/adversarial-review/examples/sample-review-v2.2.md → exit=0
 node skills/adversarial-review/scripts/check-report.mjs skills/adversarial-review/examples/sample-review.md       → exit=1（2 处不符合，符合预期）
@@ -302,6 +338,7 @@ node skills/adversarial-review/scripts/check-report.mjs skills/adversarial-revie
 - **放行方向（防误报）的覆盖比判红方向薄**：29 用例里只有 4 条绿锚（用例 22 裸命令 / 27 引号内中文 / 28 陌生名带 flag / 以及合规报告本身），而 `PATHY`（带路径的脚本）与 `WRAPPER`（`sudo`/`time` 穿透）两个分支**没有各自的独立用例**，只被第三节的 27 格手验表覆盖。下一轮若有人把这两行改弱，行为套件不会立刻叫——这是本版已知的不对称，写在这里是为了让它别被当成"两侧都有保险"。
 - `check-docs.mjs` 仍然只有 `selfTest()` 这一层保护，没有外部测试套件；它自己的跳过规则被人改弱，只有那几段合成语料会叫。
 - 突变靶子仍是枚举清单。P11–P14 钉住的是"这一版判据的强度"，下一版新判据还得再补一类形状——`CONTRIBUTING.md` 的元规则是流程约束，不是机检约束：**没有检查能验证"你为下一个判据配了靶子"**，除非它和靶子同批提交（靠人 review）。
+- **T11 的修复同样有边界**：`verify-install.sh` 只核对显式清单与 `$HOME` **一层**点目录里的安装根，更深或自定义路径下的陈旧副本它看不见，而且**脚本无法自曝"漏了一个根"**——它不知道自己不知道谁。用例 2 保证的是"清单外、同层的宿主根会被抓到"，不是"覆盖完备"。
 
 ---
 

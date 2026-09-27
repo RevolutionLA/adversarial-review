@@ -69,11 +69,20 @@ if ! node scripts/test-check-report.mjs >"$LOGD/report.log" 2>&1; then
 fi
 echo "[pre-commit] ✅ 报告机检器测试通过"
 
-# 5. shell 语法
-for f in skills/adversarial-review/scripts/*.sh; do
+# 5. shell 语法（含仓库级 scripts/：verify-install 的回归测试本身就是 shell 脚本，
+#    语法错要在这里挡住，而不是等到发布时才发现门禁从没跑过）
+for f in skills/adversarial-review/scripts/*.sh scripts/*.sh; do
   bash -n "$f" || fail "shell 语法错误: $f"
 done
 echo "[pre-commit] ✅ shell 语法通过"
+
+# 5c. 安装脚本的回归测试（v2.5.1：verify-install 的候选根清单漏一个宿主，
+#     就会对着陈旧副本报"全部安装根版本一致"——兜底清单少一项是本项目抓过的缺陷类）
+if ! bash scripts/test-verify-install.sh >"$LOGD/install.log" 2>&1; then
+  cat "$LOGD/install.log" >&2
+  fail "verify-install 回归测试未通过 —— 禁止提交"
+fi
+echo "[pre-commit] ✅ verify-install 测试通过"
 
 # 5b. PowerShell 语法（CI 有这一步，本地此前没有 —— 本地/CI 门禁不对齐，评审 R14）。
 #     没有 pwsh/powershell 时**如实说明跳过**，不许静默"通过"。

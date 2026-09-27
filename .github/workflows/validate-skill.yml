@@ -56,8 +56,10 @@ jobs:
       - name: 校验 shell 脚本语法
         run: |
           set -euo pipefail
-          bash -n skills/adversarial-review/scripts/install.sh
-          bash -n skills/adversarial-review/scripts/verify-install.sh
+          for f in skills/adversarial-review/scripts/*.sh scripts/*.sh; do bash -n "$f"; done
+
+      - name: 安装脚本的回归测试（多安装根一致性，v2.5.1）
+        run: bash scripts/test-verify-install.sh
 
       - name: 校验 PowerShell 脚本语法
         shell: pwsh

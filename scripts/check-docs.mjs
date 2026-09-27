@@ -267,6 +267,20 @@ function dimensionCount() {
   return rows.length;
 }
 
+/** 「第 N 道门禁」点名判定的对照表：脚本名（含去掉 test- 前缀的写法）→ 它是第几道 */
+function gateOwnerIndex() {
+  const map = new Map();
+  actualGates.forEach((g, i) => {
+    map.set(g, i + 1);
+    map.set(g.replace(/^test-/, ""), i + 1);
+  });
+  if (map.size < actualGates.length) {
+    failures.push(`${rel(PRECOMMIT)} 门禁脚本名互相冲突 —— 点名判定失效`);
+    return null;
+  }
+  return map;
+}
+
 /** pre-commit 里 node 门禁的顺序（"第 N 道门禁"主张的对照表） */
 function gateList() {
   const src = read(PRECOMMIT);
@@ -280,6 +294,7 @@ function gateList() {
 
 const actualDims = dimensionCount();
 const actualGates = gateList();
+const gateOwners = gateOwnerIndex();
 const countRegistrations = (file, re) =>
   read(file).split("\n").filter((l) => re.test(l)).length;
 const actualCases = {
@@ -292,7 +307,7 @@ const versionOf = (text) => /(?:^|\n)\s*version:\s*"?(\d+\.\d+\.\d+)"?/.exec(tex
 const skillVersion = versionOf(skillText);
 const changelogVersion = /^\s*##\s*\[(\d+\.\d+\.\d+)\]/m.exec(read(CHANGELOG_MD))?.[1] ?? null;
 
-const hits = { dims: 0, gateCount: 0, cases: 0, installUrl: 0 };
+const hits = { dims: 0, gateCount: 0, cases: 0, installUrl: 0, demoBlocks: 0 };
 const caseSuiteHits = { "test-validate-skill.mjs": 0, "test-check-report.mjs": 0 };
 const assert = (file, lineNo, label, actual, claimed, hitKey) => {
   if (hitKey) hits[hitKey]++;
@@ -319,6 +334,12 @@ const GATE_CN_ORD = /第([一二三四五六七八九十]{1,3}|\d{1,3})道门禁
 const GATE_EN_COUNT = /\(\s*(one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s+(?:checks|gates)\s*\)/gi;
 const GATE_EN_ORD = /\b(?:the|as)\s+(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|\d+)\s+gate\b/i;
 const CASE_CLAIM = /(\d{1,3})\s*(?:个)?\s*用例/;
+// 首屏"眼见为实"那几段演示的**段数主张**（本轮文档自审抓到：演示从三段增到四段后，
+// 标题仍写"这三段"、省略说明仍写"截到 4 条"）。只认总量句式，"第一段/这一段/第 ④ 段"
+// 这类序数或单指不参与对账，否则正常的逐段讲解会全变噪音。
+const DEMO_CN_TOTAL = /(?:下面|这|以上|全部)\s*([二三四五六七八九十])\s*段/g;
+const DEMO_CN_TAIL = /([二三四五六七八九十])\s*段(?:演示|实测|输出)/g;
+const DEMO_EN_TOTAL = /\b(?:all|the)\s+(two|three|four|five|six)\s+(?:demo\s+)?(?:blocks?|outputs?)\b/gi;
 const GREEN_RED = /(\d{1,3})\s*绿\s*[+＋]\s*(\d{1,3})\s*红(?:\s*[+＋]\s*(\d{1,3})\s*用法错误)?/;
 // "第 17 维度"是**序数**（第 17 号维度），不是条数主张。回溯排除时要把
 // 位数也吃进去，否则正则会退一步从"7 维度"匹配出个假主张。
@@ -348,8 +369,32 @@ function quoteSpans(line) {
 }
 const inQuote = (spans, idx) => spans.some(([a, b]) => idx >= a && idx <= b);
 
+/** 一份文档里"编号演示块"的条数：中文用 `**① …`，英文用 `**1) …`，都是行首加粗 */
+function demoBlockCount(text) {
+  const circled = (text.match(/^\*\*[①②③④⑤⑥⑦⑧⑨]/gm) || []).length;
+  const numbered = (text.match(/^\*\*\d+\)/gm) || []).length;
+  return circled + numbered;
+}
+
+/** 一行里的"演示总段数"主张 → [{n, idx, raw}]，同一位置只计一次 */
+function demoClaimsInLine(line) {
+  const out = [];
+  const seen = new Set();
+  for (const re of [DEMO_CN_TOTAL, DEMO_CN_TAIL, DEMO_EN_TOTAL]) {
+    re.lastIndex = 0;
+    for (const m of line.matchAll(re)) {
+      if (seen.has(m.index)) continue;
+      seen.add(m.index);
+      const n = toNum(m[1]);
+      if (n !== null) out.push({ n, idx: m.index, raw: m[0] });
+    }
+  }
+  return out;
+}
+
 function scanNumericClaims(file, text, { lineOffset = 0 } = {}) {
   const lines = text.split("\n");
+  const demoActual = demoBlockCount(text);
   const body = [];
   scanBody(file, text, (line, no) => body.push([line, no]));
   for (const [line, rawNo] of body) {
@@ -373,12 +418,14 @@ function scanNumericClaims(file, text, { lineOffset = 0 } = {}) {
         failures.push(`${rel(file)}:${no} ${label} 越界 —— 当前共 ${actualGates.length} 道`);
       } else {
         const gate = actualGates[idx - 1];
-        const scripts = [gate, gate.replace(/^test-/, "")];
-        const named = /\.mjs/.test(line) ? line.match(/[\w-]+\.mjs/g) : [scriptNearby(lines, rawNo)].filter(Boolean);
-        const clash = named.filter((s) => !scripts.includes(s));
-        if (named.length && clash.length === named.length) {
+        // 句内没有脚本名时退回"就近 4 行内点名的脚本"（演示块里常这样写）
+        const wrong = misnamedGates(
+          /\.mjs/.test(line) ? line : ` ${scriptNearby(lines, rawNo) || ""} `,
+          idx
+        );
+        if (wrong.length) {
           failures.push(
-            `${rel(file)}:${no} ${label} 实为 ${gate}，但就近文本点名的脚本是 ${clash.join("、")}`
+            `${rel(file)}:${no} ${label} 实为 ${gate}，但同一句里点名了第 ${[...new Set(wrong.map((s) => gateOwners.get(s)))].join("、")} 道的脚本：${wrong.join("、")}`
           );
         } else {
           checked.push(`${rel(file)}:${no} ${label} = ${gate} ✅`);
@@ -412,6 +459,15 @@ function scanNumericClaims(file, text, { lineOffset = 0 } = {}) {
     if (line.includes("test-mutations.mjs")) {
       const mc = /(\d{1,3})\s*个(?:缺陷|突变)/.exec(line);
       if (mc && fresh(mc)) assert(file, no, "突变注入条数", actualMutations, +mc[1], null);
+    }
+
+    // 演示段数只在**本身带编号演示块**的文件里对账（CHANGELOG 的历史条目里
+    // "首屏三段演示输出"描述的是当时状况，没有块可对照，也不该被拉进来）。
+    if (demoActual >= 2) {
+      for (const d of demoClaimsInLine(line)) {
+        if (inQuote(quotes, d.idx)) continue;
+        assert(file, no, "首屏演示段数", demoActual, d.n, "demoBlocks");
+      }
     }
     // 「抓住 / 逃逸 / 等价」是对**某一次运行结果**的陈述，静态对不了账，
     // 只能靠提交前重跑突变测试并把真实输出贴进 CHANGELOG。这里刻意不猜。
@@ -452,6 +508,7 @@ for (const [key, need, what] of [
   ["dims", 1, "维度条数"],
   ["gateCount", 1, "门禁道数"],
   ["installUrl", 2, "install 一行流 ref"],
+  ["demoBlocks", 1, "首屏演示段数"],
 ]) {
   if (hits[key] < need) {
     failures.push(`提取错位防护触发：应提取到至少 ${need} 条「${what}」主张，实际 ${hits[key]} 条（文档句式可能已变更）`);
@@ -468,6 +525,19 @@ for (const suite of Object.keys(actualCases)) {
 // 上面所有"跳过/切句"规则，本身也是代码，也会被改坏。这里用合成语料喂给抽取函数，
 // 要求**该抓的必须抓到、该放的必须放过**——否则"这次改对了"没有任何保护，
 // 下次有人为了压噪音再加一个整行跳过，没人知道。
+/**
+ * 「第 N 道门禁」句内点名稽核（评审 T4）：返回这句里被安错位置的**已知门禁**脚本名。
+ * 逐名追究，而不是"只要有一个对就放行"——README 讲第六道门禁那句天然同时出现
+ * check-report.mjs 与 test-check-report.mjs，旧判据（全部点名都错才报）对这种
+ * 长句里的错误点名完全免疫。未知的 .mjs 名字放过（可能是仓库外的工具），避免误报。
+ */
+function misnamedGates(line, idx) {
+  const gate = actualGates[idx - 1];
+  const scripts = [gate, gate.replace(/^test-/, "")];
+  const named = line.match(/[\w-]+\.mjs/g) || [];
+  return named.filter((s) => !scripts.includes(s) && gateOwners?.has(s));
+}
+
 function selfTest() {
   const cases = [
     { line: "SKILL.md（182 行，其中正文 173 行）", want: ["total:182", "body:173"], why: "现状陈述照扫" },
@@ -488,6 +558,59 @@ function selfTest() {
   }
   if (toNum("六") !== 6 || toNum("五") !== 5 || toNum("sixth") !== 6) {
     failures.push("抽取器自检失败：中文/英文数字映射被改坏");
+  }
+
+  // 「第 N 道门禁」点名稽核自检（评审 T4）：错点必须逐名抓到，对点不得误报。
+  // check-docs 没有外部测试套件，这段自检就是它唯一的"能失败"证据。
+  const gateCases = [
+    {
+      idx: actualGates.length,
+      line: "构成第六道门禁（`scripts/test-check-report.mjs`，机检器 `check-report.mjs` 是被测对象）",
+      want: 0,
+      why: "同一道门禁的两种写法都该放过",
+    },
+    {
+      idx: 1,
+      line: "第一道门禁是 test-check-report.mjs 与 check-docs.mjs",
+      want: 2,
+      why: "把别道的脚本安到第 1 道头上须逐名追究",
+    },
+    {
+      idx: actualGates.length,
+      line: "第六道门禁 = test-validate-skill.mjs 的回归测试（与 check-report.mjs 无关）",
+      want: 1,
+      why: "长句里混入别道脚本，不得因同句还有合法名字而免检",
+    },
+  ];
+  for (const g of gateCases) {
+    const got = misnamedGates(g.line, g.idx).length;
+    if (got !== g.want)
+      failures.push(
+        `门禁点名自检失败（${g.why}）：语料「${g.line}」应抓到 ${g.want} 个错点，实际 ${got}`
+      );
+  }
+
+  // 演示段数抽取自检：总量句式必须抓到，序数/单指必须放过——
+  // 后者一旦被当成主张，逐段讲解的文档会永远红，下一个人就会把整条规则删掉。
+  const demoCases = [
+    { line: "### 眼见为实：这四段是刚跑出来的真实输出", want: [4], why: "「这 N 段」是总量主张" },
+    { line: "All four blocks were regenerated", want: [4], why: "英文总量句式" },
+    { line: "第一段就是 check-docs 上线当晚抓到的问题", want: [], why: "序数不是总量" },
+    { line: "下面第 ④ 段是这两条绕过的现场复现", want: [], why: "单指某段不是总量" },
+    { line: "上一版的这一段是手删的", want: [], why: "「这一段」不参与对账" },
+  ];
+  for (const d of demoCases) {
+    const got = demoClaimsInLine(d.line).map((x) => x.n);
+    if (got.join() !== d.want.join())
+      failures.push(
+        `演示段数自检失败（${d.why}）：语料「${d.line}」应抽出 [${d.want.join(", ") || "无"}]，实际 [${got.join(", ") || "无"}]`
+      );
+  }
+  if (demoBlockCount("**① a\n\n**② b\n\n正文\n**③ 说明") !== 3) {
+    failures.push("演示段数自检失败：编号演示块计数被改坏（①②③ 应为 3）");
+  }
+  if (demoBlockCount("**1) a\n\n**2) b") !== 2) {
+    failures.push("演示段数自检失败：英文编号演示块计数被改坏（**1)/**2) 应为 2）");
   }
 }
 selfTest();

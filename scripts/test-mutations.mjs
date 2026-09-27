@@ -121,7 +121,7 @@ const SUITES = [
       {
         name: "P1 退回「数关键字」取证（v2.2 的绕过路径复活，评审 R1）",
         find: `  for (const id of highMeasured) {
-    const why = entryEvidence(lines, fence, hi, ids, id);
+    const why = entryEvidence(lines, fence, pairs, hi, ids, id);
     if (why) failures.push(why);
   }`,
         replace: `  // [mutated] 逐条取证已删除`,
@@ -137,9 +137,9 @@ const SUITES = [
         replace: `  for (const id of measured) {`,
       },
       {
-        name: "P4 空围栏代码块也算证据",
-        find: `      if (lines.slice(k + 1, m).some((l) => l.trim() !== "")) return true;`,
-        replace: `      return true;`,
+        name: "P4 围栏块只要非空就算证据（判据退回「有没有」，评审 T1 同类）",
+        find: `    if (lines.slice(open + 1, close).some(commandish)) return true;`,
+        replace: `    if (lines.slice(open + 1, close).some((l) => l.trim() !== "")) return true;`,
       },
       {
         name: "P5 总表零数据行不再自曝（永远绿风险）",
@@ -150,6 +150,27 @@ const SUITES = [
         name: "P6 多表报告不再优先取含定级依据的那张（评审 R15）",
         find: `    if (c.some((x) => x.includes("定级依据"))) {`,
         replace: `    if (false) {`,
+      },
+      {
+        name: "P7 取证窗口伸出本小节（评审 T2：命令塞进附录即被共用）",
+        find: `    if (fenceCommand(lines, pairs, i + 1, end)) return null;`,
+        replace: `    if (fenceCommand(lines, pairs, i + 1, Math.min(end + 9, lines.length))) return null;`,
+      },
+      {
+        name: "P8 行内代码只要存在就算命令（评审 T1：`见附录` 即盖章）",
+        find: `    if (inlineCommands(lines[i]).some(commandish)) return null;`,
+        replace: `    if (inlineCommands(lines[i]).length) return null;`,
+      },
+      {
+        name: "P9 编号未转义即拼进 RegExp（评审 T6：含元字符时崩栈/静默错配）",
+        find: `      \`\${reEscape(id)}(?![0-9A-Za-z])\`,`,
+        replace: `      \`\${id}(?![0-9A-Za-z])\`,`,
+      },
+      {
+        name: "P10 长围栏块被当成没有证据（评审 T7：闭合块须落在 9 行窗口内）",
+        find: `    if (open < from || open >= to) continue;`,
+        replace: `    if (open < from || open >= to) continue;
+    if (close > open + 8) continue; // [mutated] 复刻 v2.4 前的判据：整块必须在窗口里`,
       },
     ],
   },

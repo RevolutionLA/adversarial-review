@@ -33,7 +33,8 @@ plant() {
   cp -R "${SRC}/." "${dir}/"
   sed -i.bak "s/^  version: \"[0-9][^\"]*\"/  version: \"${2}\"/" "${dir}/SKILL.md"
   rm -f "${dir}/SKILL.md.bak"
-  printf '%s\n' "$dir"
+  # 被测脚本打印的是 pwd -P 的结果（/tmp 在 Windows 上是符号链接），断言要同一套路径
+  printf '%s\n' "$(cd "$dir" && pwd -P)"
 }
 
 new_home() {
@@ -63,7 +64,7 @@ echo "test-verify-install: verify-install.sh 回归测试"
 
 # 1 红：清单内的两个根版本不一致 —— 必须报漂移，不能只验第一个命中根
 new_home; plant ".claude" "9.9.9" >/dev/null; plant ".agents" "9.9.8" >/dev/null
-expect "清单内安装根版本漂移必须判红" 1 "✗ 版本漂移"
+expect "清单内安装根版本漂移必须判红" 1 "✗ 版本漂移" ".agents" "为 9.9.8"
 
 # 2 红：陈旧根在**清单里没写过的宿主目录**下 —— 只有自动发现能抓到（T11 本体）。
 #    把 CANDIDATES 退回纯静态清单，这条立刻变红。
@@ -73,15 +74,20 @@ expect "清单外宿主根的陈旧副本不得被静默跳过（T11）" 1 "✗ 
 # 3 红：根数要如实打印 —— 用例 2 若漏掉一个根，这里会显示 1 个而不是 2 个
 expect "自动发现的安装根数量要如实打印" 1 "核对安装根: 2 个"
 
-# 4 绿：三个根同步后放行（含清单外宿主，证明发现不是"多报"）
-new_home; plant ".claude" "9.9.9" >/dev/null; plant ".agents" "9.9.9" >/dev/null
+# 4 绿：三个根同步后放行（含清单外宿主，证明发现不是"多报"）。
+#    断言的是**整组结论**：命中根是谁、核对几个、结尾那句"通过"必须带规范校验——
+#    只断言"版本一致"那一行的用例，别人把命中顺序或规范校验拆掉它照样绿。
+new_home; C="$(plant ".claude" "9.9.9")"; plant ".agents" "9.9.9" >/dev/null
 plant ".unlistedhost" "9.9.9" >/dev/null
-expect "全部根同步后一致性检查放行" 0 "✅ 全部安装根版本一致（9.9.9）" "核对安装根: 3 个"
+expect "全部根同步后一致性检查放行" 0 \
+  "发现安装位置: $C" \
+  "✅ 全部安装根版本一致（9.9.9）" "核对安装根: 3 个" \
+  "验证通过（含规范校验）"
 
 # 5 红：一个根都没有时，排查清单要把"自动发现"这条查找路径也列出来，
 #    否则用户照静态清单排查完仍然找不到 skill，误判成安装失败
 new_home
-expect "未安装时的排查清单包含自动发现路径" 1 "未找到 adversarial-review" "自动发现"
+expect "未安装时的排查清单包含自动发现路径" 1 "未找到 adversarial-review" "自动发现" "请先安装，或手动指定路径"
 
 # 6 红：显式指定路径时，验的是**那个副本**，不得顺手宣称"多根已核对"
 new_home; D="$(plant ".claude" "9.9.9")"; plant ".agents" "9.9.8" >/dev/null

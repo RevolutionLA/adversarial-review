@@ -230,7 +230,7 @@ npx skills add RevolutionLA/adversarial-review -a claude-code
 npx skills add RevolutionLA/adversarial-review -a claude-code -a cursor -a opencode
 ```
 
-列表页：<https://www.skills.sh/revolutionla/adversarial-review>。在 skills.sh 上按关键词搜 `adversarial review` **搜不到我们**——那个索引按安装量硬截断前 200 条（2026-09-27 实测入榜最低 3 次安装，而命中 `adversarial-review` 的已有 57 条），所以请用上面的直链，或 `skills find adversarial --owner revolutionla`。
+列表页：<https://www.skills.sh/revolutionla/adversarial-review>。在 skills.sh 上按关键词搜 `adversarial review` **搜不到我们**——那个索引按安装量硬截断前 200 条（2026-10-15 复测：200 条里入榜最低 4 次安装，命中 `adversarial-review` 的已有 62 条，而我们 1 次安装排在截断线之外；9-27 首次量的是 3 次 / 57 条），所以请用上面的直链，或 `skills find adversarial --owner revolutionla`。
 
 ### 方式二：手动复制
 

@@ -233,7 +233,7 @@ npx skills add RevolutionLA/adversarial-review -a claude-code
 npx skills add RevolutionLA/adversarial-review -a claude-code -a cursor -a opencode
 ```
 
-Listing: <https://www.skills.sh/revolutionla/adversarial-review>. Searching skills.sh for `adversarial review` **will not find us** — that index hard-caps results at the top 200 entries ranked by install count (measured 2026-09-27: the lowest listed entry had 3 installs, and 57 entries already match `adversarial-review`). Use the direct link above, or `skills find adversarial --owner revolutionla`.
+Listing: <https://www.skills.sh/revolutionla/adversarial-review>. Searching skills.sh for `adversarial review` **will not find us** — that index hard-caps results at the top 200 entries ranked by install count (re-measured 2026-10-15: the lowest listed entry has 4 installs and 62 entries match `adversarial-review`, so our single install sits past the cutoff; the first measurement on 09-27 was 3 installs / 57 entries). Use the direct link above, or `skills find adversarial --owner revolutionla`.
 
 ### Option 2 — manual copy
 

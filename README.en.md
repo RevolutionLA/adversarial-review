@@ -7,6 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Agent Skill](https://img.shields.io/badge/Agent%20Skill-SKILL.md-blue.svg)](skills/adversarial-review/SKILL.md)
 [![skills.sh](https://img.shields.io/badge/skills.sh-adversarial--review-0b7285.svg)](https://www.skills.sh/revolutionla/adversarial-review)
+[![SkillHub curated](https://img.shields.io/badge/SkillHub-builtin--skill-2f6fed.svg)](https://github.com/iflytek/skillhub/tree/main/builtin-skills/skills/adversarial-review)
 [![Works with](https://img.shields.io/badge/works%20with-Claude%20Code%20%7C%20DeepSeek%20Harness%20%7C%20Cursor%20%7C%20Codex-green.svg)](#compatibility)
 
 **Install**: `npx skills add RevolutionLA/adversarial-review` (see [Install](#install))
@@ -218,6 +219,30 @@ The Third Party and the Adjudicator both look like "neutral third parties". The 
 - **One-line test for role creep**: the examiner never writes the verdict; the bench never leaves the courtroom.
 
 > The analogy flatters us: a real court has full adversarial defence (presumption of innocence, benefit of the doubt). This skill deliberately has **no defence counsel** — the author's rebuttal is folded into the adjudicator's rejections and into the Blue Team's obligation to attach evidence. So it's closer to an **inquisitorial** system (all three sides hunt the truth) than an **adversarial** one (two sides fight, judge stays passive).
+
+---
+
+## Inclusion & distribution
+
+| Channel | Status | Notes |
+|---|---|---|
+| `npx skills add RevolutionLA/adversarial-review` (skills.sh) | ✅ available | installs this repo's `main` |
+| [iflytek/skillhub](https://github.com/iflytek/skillhub) curated builtin package | ✅ merged (PR [#909](https://github.com/iflytek/skillhub/pull/909), merge `52b8401`, 2026-10-15T16:46Z) | `builtin-skills/catalog.json` pins `0d007a2` + `path: skills/adversarial-review`, declares version 2.5.1, MIT |
+| skillhub's immutable CDN artifact + runtime-manifest entry | ⏳ **not done** — in the maintainers' words before merging: "stay with maintainers and remain tracked as open items" | claiming "already distributed through the skillhub runtime" today would be **false** |
+
+Only **one file** in the curated copy differs from this repository (`SKILL.md`), and every difference is itemised in that package's `NOTICE.md`: `version` hoisted from `metadata.version` to a top-level field, `compatibility` gaining the "the machine-checker needs Node.js" note, the authoring-only `references/skill-spec.md` and its pointer dropped, and the three install scripts removed (curated packages install through skillhub's own path). The other 6 shared files are equal **by git blob sha**, not by eyeball:
+
+```bash
+# 1) compare shared files blob by blob: all equal except SKILL.md (the documented curation edits)
+gh api "repos/RevolutionLA/adversarial-review/git/trees/0d007a2?recursive=1"   --jq '.tree[]|select(.path|startswith("skills/adversarial-review/"))|"\(.path[25:]) \(.sha)"'
+gh api "repos/iflytek/skillhub/git/trees/main:builtin-skills/skills/adversarial-review?recursive=1"   --jq '.tree[]|select(.type=="blob")|"\(.path) \(.sha)"'
+
+# 2) is the pinned commit the same content as tag v2.5.1? (the two shas must match)
+gh api "repos/RevolutionLA/adversarial-review/git/trees/0d007a2?recursive=1" --jq '.tree[]|select(.path=="skills/adversarial-review/SKILL.md").sha'
+gh api "repos/RevolutionLA/adversarial-review/git/trees/v2.5.1?recursive=1"  --jq '.tree[]|select(.path=="skills/adversarial-review/SKILL.md").sha'
+```
+
+Measured here on 2026-10-17: both shas in group 2 are `d0688f26cd2e369ce3e2c16eed662f6008159c3b` (`0d007a2` is the docs-only commit right after the tag, so the skill content is v2.5.1's); in group 1 all 6 shared files match, and skillhub's `SKILL.md` is `270d7343e8c772e646b2a57edf55ad431e56592e`. **After each upstream release someone has to open a sync PR** to update the curated copy and the `catalog.json` pin — there is no automation for that step.
 
 ---
 

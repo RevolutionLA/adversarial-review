@@ -7,6 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Agent Skill](https://img.shields.io/badge/Agent%20Skill-SKILL.md-blue.svg)](skills/adversarial-review/SKILL.md)
 [![skills.sh](https://img.shields.io/badge/skills.sh-adversarial--review-0b7285.svg)](https://www.skills.sh/revolutionla/adversarial-review)
+[![SkillHub curated](https://img.shields.io/badge/SkillHub-builtin--skill-2f6fed.svg)](https://github.com/iflytek/skillhub/tree/main/builtin-skills/skills/adversarial-review)
 [![Works with](https://img.shields.io/badge/works%20with-Claude%20Code%20%7C%20DeepSeek%20Harness%20%7C%20Cursor%20%7C%20Codex-green.svg)](#兼容性)
 
 **安装**：`npx skills add RevolutionLA/adversarial-review`（详见 [安装](#安装)）
@@ -215,6 +216,30 @@ check-report: 1 条缺陷（第 5 行的总表），1 条声称实测（其中�
 - **一句话检验谁越界**：鉴定机构不写判决，合议庭不出外勤。
 
 > 这个比方有美化成分：真实法庭有完整的辩护对抗（无罪推定、疑点利益归被告），本 skill **有意不设辩护方**——开发方的申辩被并进了裁定环节的驳回理由，以及"蓝军每条指控须附证据链"的约束里。所以它更接近**职权主义**（三方都在找真相），而不是**当事人主义**（双方对抗、法官消极）。
+
+---
+
+## 收录与分发
+
+| 渠道 | 状态 | 说明 |
+|---|---|---|
+| `npx skills add RevolutionLA/adversarial-review`（skills.sh） | ✅ 可用 | 装的是本仓库 `main` |
+| [iflytek/skillhub](https://github.com/iflytek/skillhub) 内置精选包 | ✅ 已收录（PR [#909](https://github.com/iflytek/skillhub/pull/909)，merge `52b8401`，2026-10-15T16:46Z） | `builtin-skills/catalog.json` 钉 `0d007a2` + `path: skills/adversarial-review`，声明版本 2.5.1、MIT |
+| skillhub 的不可变 CDN 产物 + runtime manifest 条目 | ⏳ **未完成**，按维护方在合并前的原话"stay with maintainers and remain tracked as open items" | 现在对外说"已随 skillhub 运行时分发"是**不实**的 |
+
+策展副本与本仓库那份**只有一个文件不同**（`SKILL.md`），差异逐条列在该包内的 `NOTICE.md`：`version` 从 `metadata.version` 提到顶层、`compatibility` 补上"机检步骤需要 Node.js"、去掉写作用的 `references/skill-spec.md` 及其指针、去掉三个安装脚本（精选包统一走 skillhub 自己的安装路径）。其余 6 个共有文件是**按 git blob sha 逐个相等**，不是"看起来一样"：
+
+```bash
+# 1) 共有文件逐 blob 对比：应全部相等，只有 SKILL.md 因策展改写而不同
+gh api "repos/RevolutionLA/adversarial-review/git/trees/0d007a2?recursive=1"   --jq '.tree[]|select(.path|startswith("skills/adversarial-review/"))|"\(.path[25:]) \(.sha)"'
+gh api "repos/iflytek/skillhub/git/trees/main:builtin-skills/skills/adversarial-review?recursive=1"   --jq '.tree[]|select(.type=="blob")|"\(.path) \(.sha)"'
+
+# 2) 钉住的 commit 是不是就是 v2.5.1 那份内容（两条 sha 应相同）
+gh api "repos/RevolutionLA/adversarial-review/git/trees/0d007a2?recursive=1" --jq '.tree[]|select(.path=="skills/adversarial-review/SKILL.md").sha'
+gh api "repos/RevolutionLA/adversarial-review/git/trees/v2.5.1?recursive=1"  --jq '.tree[]|select(.path=="skills/adversarial-review/SKILL.md").sha'
+```
+
+2026-10-17 本机实跑：第 2 组两条均为 `d0688f26cd2e369ce3e2c16eed662f6008159c3b`（`0d007a2` 是 tag 之后仅改 README 的一笔，所以 skill 内容与 v2.5.1 同一份）；第 1 组 6 个共有文件全等，`SKILL.md` 在 skillhub 侧是 `270d7343e8c772e646b2a57edf55ad431e56592e`。**本仓库发新版后要提 sync PR** 更新那份精选副本与 `catalog.json` 的 pin——这一步目前没有自动化，靠人记得。
 
 ---
 

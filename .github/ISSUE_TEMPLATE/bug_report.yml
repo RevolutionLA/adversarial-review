@@ -1,0 +1,58 @@
+name: 缺陷报告
+description: skill 行为与文档描述不符、安装/验证脚本失败、门禁误判
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢报告。本仓库的约束是「每条结论带证据链」，issue 也一样：
+        请尽量附上可复现的命令与原始输出，而不是转述。
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 现象描述
+      description: 期望行为 vs 实际行为
+      placeholder: 期望 verify-install 报陈旧副本；实际打印"验证通过"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      description: 可原样粘贴运行的命令序列，与关键输出（不要手改输出）
+      placeholder: |
+        npx skills add RevolutionLA/adversarial-review
+        bash skills/adversarial-review/scripts/verify-install.sh
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: 涉及组件
+      options:
+        - 评审流程本体（SKILL.md / prompt-templates）
+        - 报告机检器 check-report.mjs
+        - 安装/验证脚本 install.sh / install.ps1 / verify-install.sh
+        - 仓库门禁（.githooks/pre-commit 或 scripts/*.mjs）
+        - 文档（README / quickstart / CHANGELOG）
+        - 其他
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: skill 版本
+      description: SKILL.md 头部 frontmatter 的 version（或安装时钉住的 tag）
+      placeholder: v2.5.1
+  - type: input
+    id: host
+    attributes:
+      label: 宿主环境
+      description: Claude Code / Codex / Cursor / DeepSeek Harness + 操作系统
+      placeholder: Claude Code on Windows 11
+  - type: textarea
+    id: logs
+    attributes:
+      label: 完整输出
+      description: 上述复现命令的完整 stdout/stderr（放代码块里，别截图）
+      render: shell

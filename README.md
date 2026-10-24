@@ -523,6 +523,7 @@ adversarial-review/
 
 ## 相关项目
 
+- [RevolutionLA 项目主页](https://revolutionla.github.io/) —— 组织全部仓库的导航站，站内每句介绍都被 `check-claims.py` 机器对账，与各仓库 README 逐句同步
 - [ascend-assistant](https://github.com/RevolutionLA/ascend-assistant) —— 昇腾服务器助手 Agent Skill
 - [dsh-dream-skin](https://github.com/RevolutionLA/dsh-dream-skin) —— DeepSeek Harness 换肤插件
 

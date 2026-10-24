@@ -524,6 +524,7 @@ adversarial-review/
 
 ## Related projects
 
+- [RevolutionLA homepage](https://revolutionla.github.io/) — navigation site for all org repositories; every description line on the site is machine-checked by `check-claims.py` and kept in sync with each repo's README
 - [ascend-assistant](https://github.com/RevolutionLA/ascend-assistant) — Agent Skill for operating Ascend NPU servers
 - [dsh-dream-skin](https://github.com/RevolutionLA/dsh-dream-skin) — Themable skin plugin for DeepSeek Harness
 

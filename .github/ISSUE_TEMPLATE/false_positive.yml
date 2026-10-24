@@ -1,0 +1,44 @@
+name: 机检器误报（误杀了真命令/真报告）
+description: check-report.mjs 把合规报告判红，或把真命令当成占位词
+labels: ["false-positive"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        误报比漏报更伤：它会让用户直接关掉检查。这类反馈是最高优先级的判据改进输入，
+        请务必附上**报告原文与被误杀的命令**，我们按 CONTRIBUTING.md 的判据强度元规则处理：
+        新判据必须同时提交反例 + 正例 + 削弱型突变靶子。
+  - type: textarea
+    id: report-original
+    attributes:
+      label: 被判红的报告原文
+      description: 完整粘贴被机检器判红的报告 markdown（放代码块里）
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: 被误杀的命令
+      description: 报告里明明是真命令、却被当作占位词的那一条（逐字粘贴）
+      placeholder: just test
+    validations:
+      required: true
+  - type: textarea
+    id: checker-output
+    attributes:
+      label: 机检器的报错输出
+      description: |
+        跑机检器并贴原始输出（不要手改）：
+        ```
+        node skills/adversarial-review/scripts/check-report.mjs <你的报告.md>
+        ```
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: why-legit
+    attributes:
+      label: 为什么它是真命令
+      description: 一句话说明该命令在报告语境里确实可运行（例如是项目 Makefile target / 系统包名 / 带路径的脚本）
+    validations:
+      required: true

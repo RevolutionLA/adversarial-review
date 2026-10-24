@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 使用问题 / 提问
+    url: https://github.com/RevolutionLA/adversarial-review/discussions
+    about: 安装、宿主兼容性、评审参数配置等使用问题请到 Discussions 提问
+  - name: 30 秒快速上手
+    url: https://github.com/RevolutionLA/adversarial-review/blob/main/skills/adversarial-review/references/quickstart.md
+    about: 报 bug 前建议先过一遍 quickstart，确认不是安装姿势问题
